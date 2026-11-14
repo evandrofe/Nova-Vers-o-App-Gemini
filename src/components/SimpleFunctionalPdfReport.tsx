@@ -16,7 +16,10 @@ import {
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { SocialAudienceSection, hasSocialAudienceData } from './SocialAudienceSection';
 import { extractDateFromName } from '../lib/metaAdsParser';
-import { COLUMNS_17_GUIDE } from '../lib/columnsGuide';
+import {
+  getActiveCostColumns,
+  getCampaignRowDisplayMetrics
+} from '../lib/columnsGuide';
 
 interface SimpleFunctionalPdfReportProps {
   meta: ReportMeta;
@@ -67,6 +70,17 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
   const maxConv = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.conv || 0)) : 0;
   const maxReach = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.reach || 0)) : 0;
   const showSocial = hasSocialAudienceData(capa);
+
+  const {
+    activeColumns,
+    visibleSet,
+    displayNumMap,
+    allVisible,
+    leadingColSpan,
+    pdfWidths,
+  } = useMemo(() => getActiveCostColumns(campaigns, true), [campaigns]);
+  const vis = (colNum: number) => visibleSet.has(colNum);
+  const colBadgeNum = (colNum: number) => displayNumMap.get(colNum) ?? colNum;
 
   // Budget Distribution Donut Data (matching BudgetDonutChart Macro-Pilares)
   const chartData = useMemo(() => {
@@ -632,13 +646,13 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
       )}
 
       {/* ======================================================================== */}
-      {/* 5. PLANILHA DE CUSTOS (MATRIZ OFICIAL DE 17 COLUNAS - IDENTICA A TELA) */}
+      {/* 5. PLANILHA DE CUSTOS (IDENTICA A TELA) */}
       {/* ======================================================================== */}
       <div className="bg-[#141518] rounded-2xl border border-[#2b2d33] shadow-xl overflow-hidden print-page-break">
         <div className="p-4 bg-gradient-to-r from-[#181a20] via-[#1c1e26] to-[#181a20] border-b border-[#2b2d33] flex items-center justify-between gap-4">
           <div>
             <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30 mb-1">
-              Planilha de Custos · 17 Colunas Oficiais Meta Ads
+              Planilha de Custos · {allVisible ? '17 Colunas Oficiais Meta Ads' : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
             </span>
             <h3 className="text-lg font-black text-white tracking-tight">
               Ações Mensais do Período{' '}
@@ -663,144 +677,138 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
         <table className="w-full table-fixed border-collapse text-[8px] font-sans">
           <thead className="bg-[#1a1c22] border-b-2 border-neutral-700">
             <tr className="text-neutral-300 font-bold uppercase tracking-tight text-[7.2px]">
-              <th className="py-2 px-1.5 border-r border-[#2b2d33] text-left w-[15%]">1. Nome da Ação</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-center w-[5%]">2. Form.</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-center w-[6%]">3. Valid.</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-amber-950/20 text-amber-300 w-[5.5%]">4. Invest.</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-amber-950/30 text-amber-300 w-[5.5%]">5. Gasto</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-blue-950/20 text-blue-300 w-[5%]">6. Alcance</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right w-[4.8%]">7. Engaj.</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right w-[4.8%]">8. Links</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-purple-950/20 text-purple-300 w-[5%]">9. ThruPlay</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-blue-950/20 text-blue-300 w-[5.2%]">10. CPM</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right w-[5%]">11. CPC</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-purple-950/20 text-purple-300 w-[5.2%]">12. C/Thru</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right w-[5%]">13. C/Int</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-right bg-emerald-950/20 text-emerald-300 w-[5.4%]">14. C/Conv</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-center w-[6.5%]">15. Filtro</th>
-              <th className="py-2 px-1 border-r border-[#2b2d33] text-center w-[6%]">16. Cidade</th>
-              <th className="py-2 px-1 text-right bg-emerald-950/40 text-emerald-300 w-[5.1%]">17. Conv.</th>
+              {vis(1) && <th style={{ width: pdfWidths[1] }} className="py-2 px-1.5 border-r border-[#2b2d33] text-left">{colBadgeNum(1)}. Nome da Ação</th>}
+              {vis(2) && <th style={{ width: pdfWidths[2] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(2)}. Form.</th>}
+              {vis(3) && <th style={{ width: pdfWidths[3] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(3)}. Valid.</th>}
+              {vis(4) && <th style={{ width: pdfWidths[4] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-amber-950/20 text-amber-300">{colBadgeNum(4)}. Invest.</th>}
+              {vis(5) && <th style={{ width: pdfWidths[5] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-amber-950/30 text-amber-300">{colBadgeNum(5)}. Gasto</th>}
+              {vis(6) && <th style={{ width: pdfWidths[6] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-blue-950/20 text-blue-300">{colBadgeNum(6)}. Alcance</th>}
+              {vis(7) && <th style={{ width: pdfWidths[7] }} className="py-2 px-1 border-r border-[#2b2d33] text-right">{colBadgeNum(7)}. Engaj.</th>}
+              {vis(8) && <th style={{ width: pdfWidths[8] }} className="py-2 px-1 border-r border-[#2b2d33] text-right">{colBadgeNum(8)}. Links</th>}
+              {vis(9) && <th style={{ width: pdfWidths[9] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-purple-950/20 text-purple-300">{colBadgeNum(9)}. ThruPlay</th>}
+              {vis(10) && <th style={{ width: pdfWidths[10] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-blue-950/20 text-blue-300">{colBadgeNum(10)}. CPM</th>}
+              {vis(11) && <th style={{ width: pdfWidths[11] }} className="py-2 px-1 border-r border-[#2b2d33] text-right">{colBadgeNum(11)}. CPC</th>}
+              {vis(12) && <th style={{ width: pdfWidths[12] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-purple-950/20 text-purple-300">{colBadgeNum(12)}. C/Thru</th>}
+              {vis(13) && <th style={{ width: pdfWidths[13] }} className="py-2 px-1 border-r border-[#2b2d33] text-right">{colBadgeNum(13)}. C/Int</th>}
+              {vis(14) && <th style={{ width: pdfWidths[14] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-emerald-950/20 text-emerald-300">{colBadgeNum(14)}. C/Conv</th>}
+              {vis(15) && <th style={{ width: pdfWidths[15] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(15)}. Filtro</th>}
+              {vis(16) && <th style={{ width: pdfWidths[16] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(16)}. Cidade</th>}
+              {vis(17) && <th style={{ width: pdfWidths[17] }} className="py-2 px-1 text-right bg-emerald-950/40 text-emerald-300">{colBadgeNum(17)}. Conv.</th>}
             </tr>
           </thead>
 
           <tbody className="divide-y divide-[#23252b]">
             {campaigns.map((r, idx) => {
-              const o = r.objective;
-              const isReels = /^Reels/i.test(o);
-              const isAlcanceOnly = o === 'Alc';
               const curDate = extractDateFromName(r.name) || (r.sortDate ? new Date(r.sortDate) : null);
               const curDateKey = curDate ? curDate.getTime() : 'none';
               const showSeparator = idx > 0 && curDateKey !== lastDateKey;
               lastDateKey = String(curDateKey);
 
+              const m = getCampaignRowDisplayMetrics(r);
               const colReach = fmtNum(r.reach);
-              const isDuplicateReach = r.reach > 0 && r.eng === r.reach;
-              const colEng =
-                isAlcanceOnly || isDuplicateReach
-                  ? '—'
-                  : o === 'Eng' ||
-                    o === 'EngLink' ||
-                    o === 'TrafLink' ||
-                    o === 'ReelsEng' ||
-                    o === 'ReelsEngLink' ||
-                    o === 'ReelsTrafLink' ||
-                    o === 'ReelsEngWhats' ||
-                    o === 'ReelsTrafWhats' ||
-                    r.eng > 0
-                  ? fmtNum(r.eng)
-                  : '—';
-
-              const colLinks =
-                o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0
-                  ? fmtNum(r.links)
-                  : '—';
-
-              const colViews = (isReels || r.views > 0) && r.views > 0 ? fmtNum(r.views) : '—';
-              const colCPM = o === 'Alc' && r.cpm > 0 ? fmtBRL(r.cpm) : '—';
-              const colCPC =
-                (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
-                r.cpc > 0
-                  ? fmtBRL(r.cpc)
-                  : '—';
-              const colThru =
-                (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
-                r.cThru > 0
-                  ? fmtBRL(r.cThru)
-                  : '—';
-              const colCInt =
-                (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0
-                  ? fmtBRL(r.cInt)
-                  : '—';
-              const colCConv =
-                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
-                r.cConv > 0
-                  ? fmtBRL(r.cConv)
-                  : '—';
-              const colConv =
-                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
-                r.conv > 0
-                  ? fmtNum(r.conv)
-                  : '—';
+              const colEng = m.engValue > 0 ? fmtNum(m.engValue) : '—';
+              const colLinks = m.linksValue > 0 ? fmtNum(m.linksValue) : '—';
+              const colViews = m.viewsValue > 0 ? fmtNum(m.viewsValue) : '—';
+              const colCPM = m.cpmValue > 0 ? fmtBRL(m.cpmValue) : '—';
+              const colCPC = m.cpcValue > 0 ? fmtBRL(m.cpcValue) : '—';
+              const colThru = m.cThruValue > 0 ? fmtBRL(m.cThruValue) : '—';
+              const colCInt = m.cIntValue > 0 ? fmtBRL(m.cIntValue) : '—';
+              const colCConv = m.cConvValue > 0 ? fmtBRL(m.cConvValue) : '—';
+              const colConv = m.convValue > 0 ? fmtNum(m.convValue) : '—';
 
               return (
                 <React.Fragment key={r.id}>
                   {showSeparator && (
                     <tr className="bg-[#101114] border-y border-[#2b2d33] h-1.5">
-                      <td colSpan={17} className="h-1.5 p-0" />
+                      <td colSpan={activeColumns.length} className="h-1.5 p-0" />
                     </tr>
                   )}
                   <tr className="print-avoid-break">
-                    <td className="py-1.5 px-1.5 border-r border-[#23252b] text-left font-medium text-white break-words leading-tight">
-                      {r.displayName || r.name}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-300 break-words">
-                      {r.format}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-400 font-mono">
-                      {r.validity || '—'}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
-                      {fmtBRL(r.budget)}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono font-bold text-amber-400 bg-amber-950/10">
-                      {fmtBRL(r.spent)}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 font-semibold bg-blue-950/10">
-                      {colReach}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
-                      {colEng}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
-                      {colLinks}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 font-semibold bg-purple-950/10">
-                      {colViews}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 bg-blue-950/10">
-                      {colCPM}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
-                      {colCPC}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 bg-purple-950/10">
-                      {colThru}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
-                      {colCInt}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-emerald-300 bg-emerald-950/10">
-                      {colCConv}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
-                      {r.filtro || '—'}
-                    </td>
-                    <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
-                      {r.cidade || '—'}
-                    </td>
-                    <td className="py-1.5 px-1 text-right font-mono font-bold text-emerald-400 bg-emerald-950/20">
-                      {colConv !== '—' ? `${colConv}` : '—'}
-                    </td>
+                    {vis(1) && (
+                      <td className="py-1.5 px-1.5 border-r border-[#23252b] text-left font-medium text-white break-words leading-tight">
+                        {r.displayName || r.name}
+                      </td>
+                    )}
+                    {vis(2) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-300 break-words">
+                        {r.format}
+                      </td>
+                    )}
+                    {vis(3) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-400 font-mono">
+                        {r.validity || '—'}
+                      </td>
+                    )}
+                    {vis(4) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                        {fmtBRL(r.budget)}
+                      </td>
+                    )}
+                    {vis(5) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono font-bold text-amber-400 bg-amber-950/10">
+                        {fmtBRL(r.spent)}
+                      </td>
+                    )}
+                    {vis(6) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 font-semibold bg-blue-950/10">
+                        {colReach}
+                      </td>
+                    )}
+                    {vis(7) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                        {colEng}
+                      </td>
+                    )}
+                    {vis(8) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                        {colLinks}
+                      </td>
+                    )}
+                    {vis(9) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 font-semibold bg-purple-950/10">
+                        {colViews}
+                      </td>
+                    )}
+                    {vis(10) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 bg-blue-950/10">
+                        {colCPM}
+                      </td>
+                    )}
+                    {vis(11) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                        {colCPC}
+                      </td>
+                    )}
+                    {vis(12) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 bg-purple-950/10">
+                        {colThru}
+                      </td>
+                    )}
+                    {vis(13) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                        {colCInt}
+                      </td>
+                    )}
+                    {vis(14) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-emerald-300 bg-emerald-950/10">
+                        {colCConv}
+                      </td>
+                    )}
+                    {vis(15) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
+                        {r.filtro || '—'}
+                      </td>
+                    )}
+                    {vis(16) && (
+                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
+                        {r.cidade || '—'}
+                      </td>
+                    )}
+                    {vis(17) && (
+                      <td className="py-1.5 px-1 text-right font-mono font-bold text-emerald-400 bg-emerald-950/20">
+                        {colConv !== '—' ? `${colConv}` : '—'}
+                      </td>
+                    )}
                   </tr>
                 </React.Fragment>
               );
@@ -809,54 +817,84 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
 
           <tfoot className="bg-[#16171d] border-t-2 border-amber-500 font-mono text-[8px]">
             <tr className="text-white font-bold print-avoid-break">
-              <td colSpan={3} className="py-2 px-1.5 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
-                Total ({campaigns.length} ações)
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
-                {fmtBRL(totalBudget)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-amber-300 bg-amber-950/30">
-                {fmtBRL(totalSpent)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-blue-300 bg-blue-950/30">
-                {fmtNum(totalReach)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
-                {fmtNum(totalInt)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
-                {fmtNum(totalLinks)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-purple-300 bg-purple-950/30">
-                {fmtNum(totalViews)}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-blue-300">
-                {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
-                {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-purple-300">
-                {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
-                {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-emerald-300">
-                {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
-              </td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
-              <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
-              <td className="py-2 px-1 text-right font-black text-emerald-400 bg-emerald-950/40">
-                {totalConv > 0 ? `${totalConv}` : '—'}
-              </td>
+              {leadingColSpan > 0 && (
+                <td colSpan={leadingColSpan} className="py-2 px-1.5 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
+                  Total ({campaigns.length} ações)
+                </td>
+              )}
+              {vis(4) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                  {fmtBRL(totalBudget)}
+                </td>
+              )}
+              {vis(5) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-amber-300 bg-amber-950/30">
+                  {fmtBRL(totalSpent)}
+                </td>
+              )}
+              {vis(6) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-blue-300 bg-blue-950/30">
+                  {fmtNum(totalReach)}
+                </td>
+              )}
+              {vis(7) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                  {fmtNum(totalInt)}
+                </td>
+              )}
+              {vis(8) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                  {fmtNum(totalLinks)}
+                </td>
+              )}
+              {vis(9) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-purple-300 bg-purple-950/30">
+                  {fmtNum(totalViews)}
+                </td>
+              )}
+              {vis(10) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-blue-300">
+                  {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
+                </td>
+              )}
+              {vis(11) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                  {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
+                </td>
+              )}
+              {vis(12) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-purple-300">
+                  {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
+                </td>
+              )}
+              {vis(13) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                  {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
+                </td>
+              )}
+              {vis(14) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-emerald-300">
+                  {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
+                </td>
+              )}
+              {vis(15) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
+              )}
+              {vis(16) && (
+                <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
+              )}
+              {vis(17) && (
+                <td className="py-2 px-1 text-right font-black text-emerald-400 bg-emerald-950/40">
+                  {totalConv > 0 ? `${totalConv}` : '—'}
+                </td>
+              )}
             </tr>
           </tfoot>
         </table>
       </div>
 
       {/* ======================================================================== */}
-      {/* 6. DICIONÁRIO COMPLETO DAS 17 COLUNAS DA PLANILHA */}
+      {/* 6. DICIONÁRIO DAS COLUNAS VISÍVEIS DA PLANILHA */}
       {/* ======================================================================== */}
       <div className="bg-[#141518] rounded-2xl border border-[#2b2d33] p-5 shadow-xl space-y-4 print-page-break">
         <div className="border-b border-[#2b2d33] pb-3 print-avoid-break">
@@ -867,7 +905,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
             </span>
           </div>
           <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
-            O que cada uma das 17 colunas significa e por que é importante?
+            O que cada uma das {allVisible ? '17' : activeColumns.length} colunas significa e por que é importante?
           </h3>
           <p className="text-[11px] text-neutral-400 leading-relaxed">
             Consulte abaixo a descrição didática de cada coluna da planilha, por que ela é indispensável para o cliente e como analisar seus números com precisão.
@@ -875,7 +913,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          {COLUMNS_17_GUIDE.map((col) => (
+          {activeColumns.map((col) => (
             <div
               key={col.num}
               className="rounded-xl border border-[#2b2d33] bg-[#181a20] p-3 flex flex-col justify-between space-y-2 print-avoid-break"
@@ -884,7 +922,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
                 <div className="flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="w-5 h-5 rounded-md bg-neutral-800 border border-neutral-700 font-mono text-[10px] font-black text-amber-400 flex items-center justify-center shrink-0">
-                      {col.num}
+                      {colBadgeNum(col.num)}
                     </span>
                     <h4 className="font-bold text-xs text-white truncate">{col.name}</h4>
                   </div>

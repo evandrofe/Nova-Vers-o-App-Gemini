@@ -1,3 +1,5 @@
+import { CampaignRow } from '../types';
+
 export interface ColumnInfo {
   num: number;
   name: string;
@@ -242,3 +244,169 @@ export const COLUMNS_17_GUIDE: ColumnInfo[] = [
     idealFor: 'Vendas diretas, atendimento e novos clientes'
   }
 ];
+
+const PDF_COLUMN_WEIGHTS: Record<number, number> = {
+  1: 15,
+  2: 5,
+  3: 6,
+  4: 5.5,
+  5: 5.5,
+  6: 5,
+  7: 4.8,
+  8: 4.8,
+  9: 5,
+  10: 5.2,
+  11: 5,
+  12: 5.2,
+  13: 5,
+  14: 5.4,
+  15: 6.5,
+  16: 6,
+  17: 5.1,
+};
+
+export interface RowDisplayMetrics {
+  engValue: number;
+  linksValue: number;
+  viewsValue: number;
+  cpmValue: number;
+  cpcValue: number;
+  cThruValue: number;
+  cIntValue: number;
+  cConvValue: number;
+  convValue: number;
+}
+
+export function getCampaignRowDisplayMetrics(r: CampaignRow): RowDisplayMetrics {
+  const o = r.objective;
+  const isReels = /^Reels/i.test(o);
+  const isAlcanceOnly = o === 'Alc';
+  const isDuplicateReach = r.reach > 0 && r.eng === r.reach;
+
+  const showEngVal =
+    !isAlcanceOnly &&
+    !isDuplicateReach &&
+    (o === 'Eng' ||
+      o === 'EngLink' ||
+      o === 'TrafLink' ||
+      o === 'ReelsEng' ||
+      o === 'ReelsEngLink' ||
+      o === 'ReelsTrafLink' ||
+      o === 'ReelsEngWhats' ||
+      o === 'ReelsTrafWhats' ||
+      r.eng > 0);
+  const engValue = showEngVal ? r.eng || 0 : 0;
+
+  const showLinksVal =
+    o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0;
+  const linksValue = showLinksVal ? r.links || 0 : 0;
+
+  const showViewsVal = (isReels || r.views > 0) && r.views > 0;
+  const viewsValue = showViewsVal ? r.views || 0 : 0;
+
+  const showCpmVal = o === 'Alc' && r.cpm > 0;
+  const cpmValue = showCpmVal ? r.cpm || 0 : 0;
+
+  const showCpcVal =
+    (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
+    r.cpc > 0;
+  const cpcValue = showCpcVal ? r.cpc || 0 : 0;
+
+  const showCThruVal =
+    (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
+    r.cThru > 0;
+  const cThruValue = showCThruVal ? r.cThru || 0 : 0;
+
+  const showCIntVal =
+    (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0;
+  const cIntValue = showCIntVal ? r.cInt || 0 : 0;
+
+  const showConvMetric =
+    o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0;
+  const convValue = showConvMetric && r.conv > 0 ? r.conv || 0 : 0;
+  const cConvValue = showConvMetric && r.cConv > 0 ? r.cConv : 0;
+
+  return {
+    engValue,
+    linksValue,
+    viewsValue,
+    cpmValue,
+    cpcValue,
+    cThruValue,
+    cIntValue,
+    cConvValue,
+    convValue,
+  };
+}
+
+const hasFilledText = (val: string | undefined): boolean => {
+  const s = (val || '').trim();
+  return Boolean(s && s !== '-' && s !== '—');
+};
+
+export interface ActiveCostColumnsResult {
+  activeColumns: ColumnInfo[];
+  visibleSet: Set<number>;
+  displayNumMap: Map<number, number>;
+  allVisible: boolean;
+  leadingColSpan: number;
+  pdfWidths: Record<number, string>;
+}
+
+export function getActiveCostColumns(
+  campaigns: CampaignRow[],
+  omitEmpty: boolean
+): ActiveCostColumnsResult {
+  let activeColumns: ColumnInfo[];
+
+  if (!omitEmpty || campaigns.length === 0) {
+    activeColumns = COLUMNS_17_GUIDE;
+  } else {
+    const metricsList = campaigns.map(getCampaignRowDisplayMetrics);
+    const hasCol: Record<number, boolean> = {
+      1: campaigns.some((r) => hasFilledText(r.displayName || r.name)),
+      2: campaigns.some((r) => hasFilledText(r.format)),
+      3: campaigns.some((r) => hasFilledText(r.validity)),
+      4: campaigns.some((r) => (r.budget || 0) > 0),
+      5: campaigns.some((r) => (r.spent || 0) > 0),
+      6: campaigns.some((r) => (r.reach || 0) > 0),
+      7: metricsList.some((m) => m.engValue > 0),
+      8: metricsList.some((m) => m.linksValue > 0),
+      9: metricsList.some((m) => m.viewsValue > 0),
+      10: metricsList.some((m) => m.cpmValue > 0),
+      11: metricsList.some((m) => m.cpcValue > 0),
+      12: metricsList.some((m) => m.cThruValue > 0),
+      13: metricsList.some((m) => m.cIntValue > 0),
+      14: metricsList.some((m) => m.cConvValue > 0),
+      15: campaigns.some((r) => hasFilledText(r.filtro)),
+      16: campaigns.some((r) => hasFilledText(r.cidade)),
+      17: metricsList.some((m) => m.convValue > 0),
+    };
+
+    const filtered = COLUMNS_17_GUIDE.filter((col) => hasCol[col.num]);
+    activeColumns = filtered.length > 0 ? filtered : COLUMNS_17_GUIDE;
+  }
+
+  const visibleSet = new Set(activeColumns.map((c) => c.num));
+  const displayNumMap = new Map<number, number>();
+  activeColumns.forEach((col, index) => {
+    displayNumMap.set(col.num, omitEmpty ? index + 1 : col.num);
+  });
+
+  const leadingColSpan = [1, 2, 3].filter((num) => visibleSet.has(num)).length;
+  const totalWeight = activeColumns.reduce((acc, col) => acc + (PDF_COLUMN_WEIGHTS[col.num] || 5), 0) || 100;
+  const pdfWidths: Record<number, string> = {};
+  activeColumns.forEach((col) => {
+    pdfWidths[col.num] = `${(((PDF_COLUMN_WEIGHTS[col.num] || 5) / totalWeight) * 100).toFixed(2)}%`;
+  });
+
+  return {
+    activeColumns,
+    visibleSet,
+    displayNumMap,
+    allVisible: activeColumns.length === COLUMNS_17_GUIDE.length,
+    leadingColSpan,
+    pdfWidths,
+  };
+}
+

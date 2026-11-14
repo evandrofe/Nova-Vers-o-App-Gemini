@@ -15,7 +15,11 @@ import {
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { extractDateFromName } from '../lib/metaAdsParser';
 import { exportCostSheetWebReport } from '../lib/interactiveHtmlExport';
-import { COLUMNS_17_GUIDE } from '../lib/columnsGuide';
+import {
+  COLUMNS_17_GUIDE,
+  getActiveCostColumns,
+  getCampaignRowDisplayMetrics
+} from '../lib/columnsGuide';
 import { EditableNumber, EditableText } from './EditableField';
 
 export { COLUMNS_17_GUIDE };
@@ -192,6 +196,30 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
     setTimeout(() => setBatchSuccess(false), 3000);
   };
 
+  // Visible columns (omit completely empty columns ONLY in read-only presentation / shared link mode)
+  const { activeColumns, visibleSet, displayNumMap, allVisible, leadingColSpan } = useMemo(
+    () => getActiveCostColumns(campaigns, isReadOnly),
+    [campaigns, isReadOnly]
+  );
+  const vis = (colNum: number) => visibleSet.has(colNum);
+  const colBadgeNum = (colNum: number) => displayNumMap.get(colNum) ?? colNum;
+
+  const setupCols = useMemo(
+    () => activeColumns.filter((c) => c.category === 'setup' || c.category === 'financeiro'),
+    [activeColumns]
+  );
+  const topoCols = useMemo(() => activeColumns.filter((c) => c.category === 'topo'), [activeColumns]);
+  const meioCols = useMemo(() => activeColumns.filter((c) => c.category === 'meio'), [activeColumns]);
+  const fundoCols = useMemo(() => activeColumns.filter((c) => c.category === 'fundo'), [activeColumns]);
+
+  // Ensure activeGuideTab resets to 'all' if the active category becomes empty in presentation mode
+  useEffect(() => {
+    if (activeGuideTab === 'setup' && setupCols.length === 0) setActiveGuideTab('all');
+    else if (activeGuideTab === 'topo' && topoCols.length === 0) setActiveGuideTab('all');
+    else if (activeGuideTab === 'meio' && meioCols.length === 0) setActiveGuideTab('all');
+    else if (activeGuideTab === 'fundo' && fundoCols.length === 0) setActiveGuideTab('all');
+  }, [activeGuideTab, setupCols.length, topoCols.length, meioCols.length, fundoCols.length]);
+
   // Filter campaigns based on search query
   const filteredCampaigns = useMemo(() => {
     if (!searchQuery.trim()) return campaigns;
@@ -205,14 +233,14 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
     );
   }, [campaigns, searchQuery]);
 
-  // Filter guide columns
+  // Filter guide columns from activeColumns
   const filteredGuide = useMemo(() => {
-    if (activeGuideTab === 'all') return COLUMNS_17_GUIDE;
-    if (activeGuideTab === 'setup') {
-      return COLUMNS_17_GUIDE.filter((c) => c.category === 'setup' || c.category === 'financeiro');
-    }
-    return COLUMNS_17_GUIDE.filter((c) => c.category === activeGuideTab);
-  }, [activeGuideTab]);
+    if (activeGuideTab === 'all') return activeColumns;
+    if (activeGuideTab === 'setup') return setupCols;
+    if (activeGuideTab === 'topo') return topoCols;
+    if (activeGuideTab === 'meio') return meioCols;
+    return fundoCols;
+  }, [activeGuideTab, activeColumns, setupCols, topoCols, meioCols, fundoCols]);
 
   let lastDateKey = '';
 
@@ -248,7 +276,10 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                 Relatório de {meta.cliente || 'Cliente'}
               </h1>
               <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                Matriz Oficial de 17 Colunas e Métricas Detalhadas • Base de dados oficial da Meta ({campaigns.length} ações)
+                {allVisible
+                  ? 'Matriz Oficial de 17 Colunas e Métricas Detalhadas'
+                  : `Matriz Executiva de ${activeColumns.length} Colunas Preenchidas e Métricas Detalhadas`}{' '}
+                • Base de dados oficial da Meta ({campaigns.length} ações)
               </p>
             </div>
           </div>
@@ -371,7 +402,8 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
           <div className="space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                Planilha de Custos · 17 Colunas Oficiais Meta Ads
+                Planilha de Custos ·{' '}
+                {allVisible ? '17 Colunas Oficiais Meta Ads' : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
               </span>
               <span className="text-[11px] text-neutral-400">
                 Clique no título de qualquer coluna abaixo para ir direto à explicação dela
@@ -480,258 +512,256 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
           <table className="w-full border-collapse text-[11px] font-sans">
             <thead className="sticky top-0 z-20 bg-[#1a1c22] shadow-md border-b-2 border-neutral-700">
               <tr className="text-neutral-300 font-bold uppercase tracking-tight text-[9px] select-none">
-                <th className="border-r border-[#2b2d33] text-left whitespace-nowrap min-w-[230px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(1)}
-                    className="w-full py-3 px-3 flex items-center gap-1 text-left cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 1: Nome da Ação"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">1</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Nome da Ação</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(2)}
-                    className="w-full py-3 px-2 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 2: Formato"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">2</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Formato</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[95px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(3)}
-                    className="w-full py-3 px-2 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 3: Validade"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">3</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Validade</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-amber-950/20 hover:bg-amber-950/40 text-amber-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(4)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-amber-950/50"
-                    title="Clique para ir à explicação da Coluna 4: Investimento"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-amber-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-amber-300 transition-colors">4</span>
-                    <span className="group-hover/th:underline">Investimento</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-amber-950/30 hover:bg-amber-950/50 text-amber-300 font-extrabold transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(5)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-amber-950/60"
-                    title="Clique para ir à explicação da Coluna 5: Valor Gasto"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-amber-900/80 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-amber-200 transition-colors">5</span>
-                    <span className="group-hover/th:underline">Valor Gasto</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 bg-blue-950/20 hover:bg-blue-950/40 text-blue-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(6)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-blue-950/50"
-                    title="Clique para ir à explicação da Coluna 6: Alcance"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-blue-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-blue-200 transition-colors">6</span>
-                    <span className="group-hover/th:underline">Alcance</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(7)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 7: Engajamento"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">7</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Engajamento</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(8)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 8: Cliques Link"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">8</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Cliques Link</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(9)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-purple-950/50"
-                    title="Clique para ir à explicação da Coluna 9: Visualização (ThruPlay)"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-purple-200 transition-colors">9</span>
-                    <span className="group-hover/th:underline">ThruPlay</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 bg-blue-950/20 hover:bg-blue-950/40 text-blue-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(10)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-blue-950/50"
-                    title="Clique para ir à explicação da Coluna 10: Custo por 1.000 Pessoas (CPM)"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-blue-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-blue-200 transition-colors">10</span>
-                    <span className="group-hover/th:underline">Custo / 1.000</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(11)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 11: Custo por Cliques Link (CPC)"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">11</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Custo / Clique</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(12)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-purple-950/50"
-                    title="Clique para ir à explicação da Coluna 12: Custo por ThruPlay"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-purple-200 transition-colors">12</span>
-                    <span className="group-hover/th:underline">Custo / ThruPlay</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(13)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 13: Custo por Interação"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">13</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Custo / Interação</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(14)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-emerald-950/50"
-                    title="Clique para ir à explicação da Coluna 14: Custo por Conversa"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-emerald-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-emerald-200 transition-colors">14</span>
-                    <span className="group-hover/th:underline">Custo / Conversa</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(15)}
-                    className="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 15: Filtro"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">15</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Filtro</span>
-                  </button>
-                </th>
-                <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(16)}
-                    className="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
-                    title="Clique para ir à explicação da Coluna 16: Cidade"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">16</span>
-                    <span className="group-hover/th:text-amber-300 transition-colors">Cidade</span>
-                  </button>
-                </th>
-                <th className="border-b border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 hover:bg-emerald-950/60 text-emerald-300 font-extrabold transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => handleFocusColumnGuide(17)}
-                    className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-emerald-950/70"
-                    title="Clique para ir à explicação da Coluna 17: Conversas Iniciadas"
-                  >
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-emerald-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-white transition-colors">17</span>
-                    <span className="group-hover/th:underline">Conversas</span>
-                  </button>
-                </th>
+                {vis(1) && (
+                  <th className="border-r border-[#2b2d33] text-left whitespace-nowrap min-w-[230px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(1)}
+                      className="w-full py-3 px-3 flex items-center gap-1 text-left cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Nome da Ação"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(1)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Nome da Ação</span>
+                    </button>
+                  </th>
+                )}
+                {vis(2) && (
+                  <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(2)}
+                      className="w-full py-3 px-2 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Formato"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(2)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Formato</span>
+                    </button>
+                  </th>
+                )}
+                {vis(3) && (
+                  <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[95px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(3)}
+                      className="w-full py-3 px-2 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Validade"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(3)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Validade</span>
+                    </button>
+                  </th>
+                )}
+                {vis(4) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-amber-950/20 hover:bg-amber-950/40 text-amber-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(4)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-amber-950/50"
+                      title="Clique para ir à explicação da Coluna: Investimento"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-amber-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-amber-300 transition-colors">{colBadgeNum(4)}</span>
+                      <span className="group-hover/th:underline">Investimento</span>
+                    </button>
+                  </th>
+                )}
+                {vis(5) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-amber-950/30 hover:bg-amber-950/50 text-amber-300 font-extrabold transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(5)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-amber-950/60"
+                      title="Clique para ir à explicação da Coluna: Valor Gasto"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-amber-900/80 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-amber-200 transition-colors">{colBadgeNum(5)}</span>
+                      <span className="group-hover/th:underline">Valor Gasto</span>
+                    </button>
+                  </th>
+                )}
+                {vis(6) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 bg-blue-950/20 hover:bg-blue-950/40 text-blue-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(6)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-blue-950/50"
+                      title="Clique para ir à explicação da Coluna: Alcance"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-blue-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-blue-200 transition-colors">{colBadgeNum(6)}</span>
+                      <span className="group-hover/th:underline">Alcance</span>
+                    </button>
+                  </th>
+                )}
+                {vis(7) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(7)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Engajamento"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(7)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Engajamento</span>
+                    </button>
+                  </th>
+                )}
+                {vis(8) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(8)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Cliques Link"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(8)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Cliques Link</span>
+                    </button>
+                  </th>
+                )}
+                {vis(9) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[85px] p-0 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(9)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-purple-950/50"
+                      title="Clique para ir à explicação da Coluna: Visualização (ThruPlay)"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-purple-200 transition-colors">{colBadgeNum(9)}</span>
+                      <span className="group-hover/th:underline">ThruPlay</span>
+                    </button>
+                  </th>
+                )}
+                {vis(10) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 bg-blue-950/20 hover:bg-blue-950/40 text-blue-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(10)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-blue-950/50"
+                      title="Clique para ir à explicação da Coluna: Custo por 1.000 Pessoas (CPM)"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-blue-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-blue-200 transition-colors">{colBadgeNum(10)}</span>
+                      <span className="group-hover/th:underline">Custo / 1.000</span>
+                    </button>
+                  </th>
+                )}
+                {vis(11) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(11)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Custo por Cliques Link (CPC)"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(11)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Custo / Clique</span>
+                    </button>
+                  </th>
+                )}
+                {vis(12) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(12)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-purple-950/50"
+                      title="Clique para ir à explicação da Coluna: Custo por ThruPlay"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-purple-200 transition-colors">{colBadgeNum(12)}</span>
+                      <span className="group-hover/th:underline">Custo / ThruPlay</span>
+                    </button>
+                  </th>
+                )}
+                {vis(13) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[90px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(13)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Custo por Interação"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(13)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Custo / Interação</span>
+                    </button>
+                  </th>
+                )}
+                {vis(14) && (
+                  <th className="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(14)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-emerald-950/50"
+                      title="Clique para ir à explicação da Coluna: Custo por Conversa"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-emerald-900/60 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-emerald-200 transition-colors">{colBadgeNum(14)}</span>
+                      <span className="group-hover/th:underline">Custo / Conversa</span>
+                    </button>
+                  </th>
+                )}
+                {vis(15) && (
+                  <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(15)}
+                      className="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Filtro"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(15)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Filtro</span>
+                    </button>
+                  </th>
+                )}
+                {vis(16) && (
+                  <th className="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(16)}
+                      className="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-neutral-800"
+                      title="Clique para ir à explicação da Coluna: Cidade"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-neutral-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-neutral-400 transition-colors">{colBadgeNum(16)}</span>
+                      <span className="group-hover/th:text-amber-300 transition-colors">Cidade</span>
+                    </button>
+                  </th>
+                )}
+                {vis(17) && (
+                  <th className="border-b border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 hover:bg-emerald-950/60 text-emerald-300 font-extrabold transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleFocusColumnGuide(17)}
+                      className="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer group/th focus:outline-none focus-visible:bg-emerald-950/70"
+                      title="Clique para ir à explicação da Coluna: Conversas Iniciadas"
+                    >
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-emerald-800 group-hover/th:bg-amber-500 group-hover/th:text-neutral-950 text-white transition-colors">{colBadgeNum(17)}</span>
+                      <span className="group-hover/th:underline">Conversas</span>
+                    </button>
+                  </th>
+                )}
               </tr>
             </thead>
 
             <tbody className="divide-y divide-[#23252b]">
               {filteredCampaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="py-12 text-center text-neutral-400 text-sm italic">
+                  <td colSpan={activeColumns.length} className="py-12 text-center text-neutral-400 text-sm italic">
                     Nenhuma campanha encontrada com o filtro "{searchQuery}".
                   </td>
                 </tr>
               ) : (
                 filteredCampaigns.map((r, idx) => {
-                  const o = r.objective;
-                  const isReels = /^Reels/i.test(o);
-                  const isAlcanceOnly = o === 'Alc';
                   const curDate = extractDateFromName(r.name) || (r.sortDate ? new Date(r.sortDate) : null);
                   const curDateKey = curDate ? curDate.getTime() : 'none';
 
                   const showSeparator = idx > 0 && curDateKey !== lastDateKey;
                   lastDateKey = String(curDateKey);
 
-                  // Do not duplicate reach into engagement if campaign is Alcance or values are equal
-                  const isDuplicateReach = r.reach > 0 && r.eng === r.reach;
-                  const showEngVal =
-                    !isAlcanceOnly &&
-                    !isDuplicateReach &&
-                    (o === 'Eng' ||
-                      o === 'EngLink' ||
-                      o === 'TrafLink' ||
-                      o === 'ReelsEng' ||
-                      o === 'ReelsEngLink' ||
-                      o === 'ReelsTrafLink' ||
-                      o === 'ReelsEngWhats' ||
-                      o === 'ReelsTrafWhats' ||
-                      r.eng > 0);
-                  const engValue = showEngVal ? r.eng || 0 : 0;
-
-                  const showLinksVal =
-                    o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0;
-                  const linksValue = showLinksVal ? r.links || 0 : 0;
-
-                  const showViewsVal = (isReels || r.views > 0) && r.views > 0;
-                  const viewsValue = showViewsVal ? r.views || 0 : 0;
-
-                  const showCpmVal = o === 'Alc' && r.cpm > 0;
-                  const cpmValue = showCpmVal ? r.cpm || 0 : 0;
-
-                  const showCpcVal =
-                    (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
-                    r.cpc > 0;
-                  const cpcValue = showCpcVal ? r.cpc || 0 : 0;
-
-                  const showCThruVal =
-                    (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
-                    r.cThru > 0;
-                  const cThruValue = showCThruVal ? r.cThru || 0 : 0;
-
-                  const showCIntVal = (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0;
-                  const cIntValue = showCIntVal ? r.cInt || 0 : 0;
-
-                  const showConvVal =
-                    (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
-                    r.conv > 0;
-                  const convValue = showConvVal ? r.conv || 0 : 0;
-                  const cConvValue = showConvVal && r.cConv > 0 ? r.cConv : 0;
+                  const {
+                    engValue,
+                    linksValue,
+                    viewsValue,
+                    cpmValue,
+                    cpcValue,
+                    cThruValue,
+                    cIntValue,
+                    cConvValue,
+                    convValue
+                  } = getCampaignRowDisplayMetrics(r);
 
                   const canEditCell = !isReadOnly && Boolean(onUpdateCampaign);
 
@@ -739,206 +769,240 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     <React.Fragment key={r.id}>
                       {showSeparator && (
                         <tr className="bg-[#101114] border-y border-[#2b2d33] h-2">
-                          <td colSpan={17} className="h-2 p-0" />
+                          <td colSpan={activeColumns.length} className="h-2 p-0" />
                         </tr>
                       )}
                       <tr className="hover:bg-[#1a1c24] transition-colors group">
-                        <td className="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white group-hover:text-amber-200 transition-colors">
-                          <EditableText
-                            value={r.displayName || r.name}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { displayName: v })}
-                            isReadOnly={!canEditCell}
-                            placeholder="Nome da ação"
-                            className="font-medium text-white w-full text-[11px]"
-                          />
-                          {r.aiNotes && (
-                            <div className="mt-0.5">
-                              <EditableText
-                                value={r.aiNotes}
-                                onChange={(v) => onUpdateCampaign?.(r.id, { aiNotes: v })}
-                                isReadOnly={!canEditCell}
-                                placeholder="Observação"
-                                className="text-[9px] text-amber-400/80 font-normal w-full"
-                              />
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">
-                          <EditableText
-                            value={r.format || ''}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { format: v })}
-                            isReadOnly={!canEditCell}
-                            placeholder="Formato"
-                            className="text-center text-neutral-300 w-24 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-400">
-                          <EditableText
-                            value={r.validity || ''}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { validity: v })}
-                            isReadOnly={!canEditCell}
-                            placeholder="Validade"
-                            className="text-center text-neutral-300 w-24 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          <EditableNumber
-                            value={r.budget}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { budget: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={false}
-                            className="text-right text-neutral-300 w-24 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">
-                          <EditableNumber
-                            value={r.spent}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { spent: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={false}
-                            className="text-right font-bold text-amber-400 w-24 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">
-                          <EditableNumber
-                            value={r.reach}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { reach: v })}
-                            format="int"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={false}
-                            className="text-right font-semibold text-blue-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          <EditableNumber
-                            value={engValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { eng: v })}
-                            format="int"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-neutral-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          <EditableNumber
-                            value={linksValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { links: v })}
-                            format="int"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-neutral-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">
-                          <EditableNumber
-                            value={viewsValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { views: v })}
-                            format="int"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right font-semibold text-purple-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">
-                          <EditableNumber
-                            value={cpmValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { cpm: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-blue-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          <EditableNumber
-                            value={cpcValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { cpc: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-neutral-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">
-                          <EditableNumber
-                            value={cThruValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { cThru: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-purple-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          <EditableNumber
-                            value={cIntValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { cInt: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-neutral-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">
-                          <EditableNumber
-                            value={cConvValue}
-                            onChange={(v) => onUpdateCampaign?.(r.id, { cConv: v })}
-                            format="brl"
-                            isReadOnly={!canEditCell}
-                            dashWhenZero={true}
-                            className="text-right text-emerald-300 w-20 text-[11px]"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
-                          {isReadOnly ? (
-                            <span className="text-[10px] text-neutral-200 block min-w-[85px] truncate" title={r.filtro || undefined}>
-                              {r.filtro || '—'}
-                            </span>
-                          ) : (
-                            <input
-                              type="text"
-                              placeholder="Filtro..."
-                              value={r.filtro || ''}
-                              onChange={(e) => onUpdateFiltro?.(r.id, e.target.value)}
-                              className="bg-[#111215] hover:bg-[#181a20] focus:bg-[#181a20] border border-transparent hover:border-[#383b44] focus:border-amber-400 rounded px-1.5 py-0.5 text-[10px] text-neutral-200 text-center w-full min-w-[85px] focus:outline-none transition-all truncate"
-                              title="Editar Filtro (público / raio)"
+                        {vis(1) && (
+                          <td className="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white group-hover:text-amber-200 transition-colors">
+                            <EditableText
+                              value={r.displayName || r.name}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { displayName: v })}
+                              isReadOnly={!canEditCell}
+                              placeholder="Nome da ação"
+                              className="font-medium text-white w-full text-[11px]"
                             />
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
-                          {isReadOnly ? (
-                            <span className="text-[10px] text-neutral-200 block min-w-[80px] truncate" title={r.cidade || undefined}>
-                              {r.cidade || '—'}
-                            </span>
-                          ) : (
-                            <input
-                              type="text"
-                              placeholder="Cidade..."
-                              value={r.cidade || ''}
-                              onChange={(e) => onUpdateCidade?.(r.id, e.target.value)}
-                              className="bg-[#111215] hover:bg-[#181a20] focus:bg-[#181a20] border border-transparent hover:border-[#383b44] focus:border-amber-400 rounded px-1.5 py-0.5 text-[10px] text-neutral-200 text-center w-full min-w-[80px] focus:outline-none transition-all truncate"
-                              title="Editar Cidade"
+                            {r.aiNotes && (
+                              <div className="mt-0.5">
+                                <EditableText
+                                  value={r.aiNotes}
+                                  onChange={(v) => onUpdateCampaign?.(r.id, { aiNotes: v })}
+                                  isReadOnly={!canEditCell}
+                                  placeholder="Observação"
+                                  className="text-[9px] text-amber-400/80 font-normal w-full"
+                                />
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {vis(2) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">
+                            <EditableText
+                              value={r.format || ''}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { format: v })}
+                              isReadOnly={!canEditCell}
+                              placeholder="Formato"
+                              className="text-center text-neutral-300 w-24 text-[11px]"
                             />
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 border-b border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">
-                          {canEditCell ? (
-                            <div className="inline-flex items-center justify-end gap-1">
-                              <EditableNumber
-                                value={convValue}
-                                onChange={(v) => onUpdateCampaign?.(r.id, { conv: v })}
-                                format="int"
-                                dashWhenZero={true}
-                                className="text-right font-bold text-emerald-400 w-16 text-[11px]"
+                          </td>
+                        )}
+                        {vis(3) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-400">
+                            <EditableText
+                              value={r.validity || ''}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { validity: v })}
+                              isReadOnly={!canEditCell}
+                              placeholder="Validade"
+                              className="text-center text-neutral-300 w-24 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(4) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                            <EditableNumber
+                              value={r.budget}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { budget: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={false}
+                              className="text-right text-neutral-300 w-24 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(5) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">
+                            <EditableNumber
+                              value={r.spent}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { spent: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={false}
+                              className="text-right font-bold text-amber-400 w-24 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(6) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">
+                            <EditableNumber
+                              value={r.reach}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { reach: v })}
+                              format="int"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={false}
+                              className="text-right font-semibold text-blue-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(7) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                            <EditableNumber
+                              value={engValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { eng: v })}
+                              format="int"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-neutral-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(8) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                            <EditableNumber
+                              value={linksValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { links: v })}
+                              format="int"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-neutral-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(9) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">
+                            <EditableNumber
+                              value={viewsValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { views: v })}
+                              format="int"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right font-semibold text-purple-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(10) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">
+                            <EditableNumber
+                              value={cpmValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { cpm: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-blue-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(11) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                            <EditableNumber
+                              value={cpcValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { cpc: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-neutral-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(12) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">
+                            <EditableNumber
+                              value={cThruValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { cThru: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-purple-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(13) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                            <EditableNumber
+                              value={cIntValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { cInt: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-neutral-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(14) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">
+                            <EditableNumber
+                              value={cConvValue}
+                              onChange={(v) => onUpdateCampaign?.(r.id, { cConv: v })}
+                              format="brl"
+                              isReadOnly={!canEditCell}
+                              dashWhenZero={true}
+                              className="text-right text-emerald-300 w-20 text-[11px]"
+                            />
+                          </td>
+                        )}
+                        {vis(15) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
+                            {isReadOnly ? (
+                              <span className="text-[10px] text-neutral-200 block min-w-[85px] truncate" title={r.filtro || undefined}>
+                                {r.filtro || '—'}
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="Filtro..."
+                                value={r.filtro || ''}
+                                onChange={(e) => onUpdateFiltro?.(r.id, e.target.value)}
+                                className="bg-[#111215] hover:bg-[#181a20] focus:bg-[#181a20] border border-transparent hover:border-[#383b44] focus:border-amber-400 rounded px-1.5 py-0.5 text-[10px] text-neutral-200 text-center w-full min-w-[85px] focus:outline-none transition-all truncate"
+                                title="Editar Filtro (público / raio)"
                               />
-                              {convValue > 0 && <span className="text-[10px]">conv.</span>}
-                            </div>
-                          ) : (
-                            <span>{convValue > 0 ? `${fmtNum(convValue)} conv.` : '—'}</span>
-                          )}
-                        </td>
+                            )}
+                          </td>
+                        )}
+                        {vis(16) && (
+                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
+                            {isReadOnly ? (
+                              <span className="text-[10px] text-neutral-200 block min-w-[80px] truncate" title={r.cidade || undefined}>
+                                {r.cidade || '—'}
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="Cidade..."
+                                value={r.cidade || ''}
+                                onChange={(e) => onUpdateCidade?.(r.id, e.target.value)}
+                                className="bg-[#111215] hover:bg-[#181a20] focus:bg-[#181a20] border border-transparent hover:border-[#383b44] focus:border-amber-400 rounded px-1.5 py-0.5 text-[10px] text-neutral-200 text-center w-full min-w-[80px] focus:outline-none transition-all truncate"
+                                title="Editar Cidade"
+                              />
+                            )}
+                          </td>
+                        )}
+                        {vis(17) && (
+                          <td className="py-2.5 px-2 border-b border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">
+                            {canEditCell ? (
+                              <div className="inline-flex items-center justify-end gap-1">
+                                <EditableNumber
+                                  value={convValue}
+                                  onChange={(v) => onUpdateCampaign?.(r.id, { conv: v })}
+                                  format="int"
+                                  dashWhenZero={true}
+                                  className="text-right font-bold text-emerald-400 w-16 text-[11px]"
+                                />
+                                {convValue > 0 && <span className="text-[10px]">conv.</span>}
+                              </div>
+                            ) : (
+                              <span>{convValue > 0 ? `${fmtNum(convValue)} conv.` : '—'}</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     </React.Fragment>
                   );
@@ -949,54 +1013,84 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
             {/* Consolidated Totals Footer */}
             <tfoot className="sticky bottom-0 z-20 bg-[#16171d] border-t-2 border-amber-500 font-mono text-[10.5px]">
               <tr className="text-white font-bold">
-                <td colSpan={3} className="py-3 px-3 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                    <span>Total Consolidado ({filteredCampaigns.length} ações)</span>
-                  </div>
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
-                  {fmtBRL(totalBudget)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-amber-300 bg-amber-950/30">
-                  {fmtBRL(totalSpent)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-blue-300 bg-blue-950/30">
-                  {fmtNum(totalReach)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
-                  {fmtNum(totalInt)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
-                  {fmtNum(totalLinks)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-purple-300 bg-purple-950/30">
-                  {fmtNum(totalViews)}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-blue-300">
-                  {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
-                  {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-purple-300">
-                  {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
-                  {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
-                </td>
-                <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-emerald-300">
-                  {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
-                </td>
-                <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
-                  —
-                </td>
-                <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
-                  —
-                </td>
-                <td className="py-3 px-2 text-right font-mono font-black text-emerald-400 bg-emerald-950/40">
-                  {totalConv > 0 ? `${totalConv} conv.` : '—'}
-                </td>
+                {leadingColSpan > 0 && (
+                  <td colSpan={leadingColSpan} className="py-3 px-3 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      <span>Total Consolidado ({filteredCampaigns.length} ações)</span>
+                    </div>
+                  </td>
+                )}
+                {vis(4) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                    {fmtBRL(totalBudget)}
+                  </td>
+                )}
+                {vis(5) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-amber-300 bg-amber-950/30">
+                    {fmtBRL(totalSpent)}
+                  </td>
+                )}
+                {vis(6) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-blue-300 bg-blue-950/30">
+                    {fmtNum(totalReach)}
+                  </td>
+                )}
+                {vis(7) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                    {fmtNum(totalInt)}
+                  </td>
+                )}
+                {vis(8) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                    {fmtNum(totalLinks)}
+                  </td>
+                )}
+                {vis(9) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-purple-300 bg-purple-950/30">
+                    {fmtNum(totalViews)}
+                  </td>
+                )}
+                {vis(10) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-blue-300">
+                    {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
+                  </td>
+                )}
+                {vis(11) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                    {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
+                  </td>
+                )}
+                {vis(12) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-purple-300">
+                    {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
+                  </td>
+                )}
+                {vis(13) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                    {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
+                  </td>
+                )}
+                {vis(14) && (
+                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-emerald-300">
+                    {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
+                  </td>
+                )}
+                {vis(15) && (
+                  <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
+                    —
+                  </td>
+                )}
+                {vis(16) && (
+                  <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
+                    —
+                  </td>
+                )}
+                {vis(17) && (
+                  <td className="py-3 px-2 text-right font-mono font-black text-emerald-400 bg-emerald-950/40">
+                    {totalConv > 0 ? `${totalConv} conv.` : '—'}
+                  </td>
+                )}
               </tr>
             </tfoot>
           </table>
@@ -1016,7 +1110,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
               </span>
             </div>
             <h3 className="text-xl font-bold text-white tracking-tight">
-              O que cada uma das 17 colunas significa e por que é importante?
+              O que cada uma das {allVisible ? '17' : activeColumns.length} colunas significa e por que é importante?
             </h3>
             <p className="text-xs text-neutral-400 leading-relaxed max-w-3xl">
               Consulte abaixo a descrição didática de cada coluna da planilha, por que ela é indispensável para o cliente
@@ -1034,52 +1128,60 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
               }`}
             >
-              Todas (17)
+              Todas ({activeColumns.length})
             </button>
-            <button
-              onClick={() => setActiveGuideTab('setup')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeGuideTab === 'setup'
-                  ? 'bg-amber-500 text-neutral-950 font-extrabold shadow-md'
-                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              }`}
-            >
-              Setup & Verba (1 a 5)
-            </button>
-            <button
-              onClick={() => setActiveGuideTab('topo')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeGuideTab === 'topo'
-                  ? 'bg-blue-600 text-white font-extrabold shadow-md'
-                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              }`}
-            >
-              Alcance / CPM (6 e 10)
-            </button>
-            <button
-              onClick={() => setActiveGuideTab('meio')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeGuideTab === 'meio'
-                  ? 'bg-purple-600 text-white font-extrabold shadow-md'
-                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              }`}
-            >
-              Engajamento / Vídeos (7 a 13)
-            </button>
-            <button
-              onClick={() => setActiveGuideTab('fundo')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeGuideTab === 'fundo'
-                  ? 'bg-emerald-600 text-white font-extrabold shadow-md'
-                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              }`}
-            >
-              WhatsApp & Vendas (14 e 17)
-            </button>
+            {setupCols.length > 0 && (
+              <button
+                onClick={() => setActiveGuideTab('setup')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeGuideTab === 'setup'
+                    ? 'bg-amber-500 text-neutral-950 font-extrabold shadow-md'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                {allVisible ? 'Setup & Verba (1 a 5)' : `Setup & Verba (${setupCols.length})`}
+              </button>
+            )}
+            {topoCols.length > 0 && (
+              <button
+                onClick={() => setActiveGuideTab('topo')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeGuideTab === 'topo'
+                    ? 'bg-blue-600 text-white font-extrabold shadow-md'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                {allVisible ? 'Alcance / CPM (6 e 10)' : `Alcance / CPM (${topoCols.length})`}
+              </button>
+            )}
+            {meioCols.length > 0 && (
+              <button
+                onClick={() => setActiveGuideTab('meio')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeGuideTab === 'meio'
+                    ? 'bg-purple-600 text-white font-extrabold shadow-md'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                {allVisible ? 'Engajamento / Vídeos (7 a 13)' : `Engajamento / Vídeos (${meioCols.length})`}
+              </button>
+            )}
+            {fundoCols.length > 0 && (
+              <button
+                onClick={() => setActiveGuideTab('fundo')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeGuideTab === 'fundo'
+                    ? 'bg-emerald-600 text-white font-extrabold shadow-md'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                {allVisible ? 'WhatsApp & Vendas (14 e 17)' : `WhatsApp & Vendas (${fundoCols.length})`}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* 17 Cards Grid */}
+        {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredGuide.map((col) => {
             const isFocused = focusedColumnNum === col.num;
@@ -1106,7 +1208,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                             : 'bg-neutral-800 border-neutral-700 text-amber-400'
                         }`}
                       >
-                        {col.num}
+                        {colBadgeNum(col.num)}
                       </span>
                       <h4
                         className={`font-bold text-sm transition-colors truncate ${
