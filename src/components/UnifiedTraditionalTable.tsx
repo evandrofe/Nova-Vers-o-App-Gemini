@@ -15,7 +15,8 @@ import {
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { extractDateFromName } from '../lib/metaAdsParser';
 import { exportCostSheetWebReport } from '../lib/interactiveHtmlExport';
-import { COLUMNS_17_GUIDE, ColumnInfo } from '../lib/columnsGuide';
+import { COLUMNS_17_GUIDE } from '../lib/columnsGuide';
+import { EditableNumber, EditableText } from './EditableField';
 
 export { COLUMNS_17_GUIDE };
 
@@ -42,6 +43,8 @@ interface UnifiedTraditionalTableProps {
   isPresentationMode?: boolean;
   onTogglePresentationMode?: () => void;
   onCreateClientLink?: () => Promise<string>;
+  onUpdateMeta?: (patch: Partial<ReportMeta>) => void;
+  onUpdateCampaign?: (campaignId: string, patch: Partial<CampaignRow>) => void;
   onUpdateFiltro?: (campaignId: string, newFiltro: string) => void;
   onUpdateCidade?: (campaignId: string, newCidade: string) => void;
   onBatchUpdateFiltroCidade?: (filtro: string, cidade: string) => void;
@@ -56,15 +59,6 @@ const fmtNum = (val: number | undefined): string => {
   if (val === undefined || val === null || isNaN(val)) return '0';
   return val.toLocaleString('pt-BR');
 };
-
-const titleCase = (str: string): string => {
-  return (str || '')
-    .toLowerCase()
-    .split(' ')
-    .map((w) => (w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(' ');
-};
-
 
 
 export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = ({
@@ -89,6 +83,8 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
   isPresentationMode = false,
   onTogglePresentationMode,
   onCreateClientLink,
+  onUpdateMeta,
+  onUpdateCampaign,
   onUpdateFiltro,
   onUpdateCidade,
   onBatchUpdateFiltroCidade
@@ -381,10 +377,25 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                 Clique no título de qualquer coluna abaixo para ir direto à explicação dela
               </span>
             </div>
-            <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+            <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
               <span>Ações Mensais do Período</span>
-              <span className="text-xs font-normal text-neutral-400">
-                ({meta.mes} {meta.ano})
+              <span className="text-xs font-normal text-neutral-400 inline-flex items-center gap-1">
+                (
+                <EditableText
+                  value={meta.mes}
+                  onChange={(v) => onUpdateMeta?.({ mes: v })}
+                  isReadOnly={isReadOnly || !onUpdateMeta}
+                  placeholder="Mês"
+                  className="text-xs text-neutral-300 w-24 text-center"
+                />
+                <EditableText
+                  value={meta.ano}
+                  onChange={(v) => onUpdateMeta?.({ ano: v })}
+                  isReadOnly={isReadOnly || !onUpdateMeta}
+                  placeholder="Ano"
+                  className="text-xs text-neutral-300 w-14 text-center"
+                />
+                )
               </span>
             </h3>
           </div>
@@ -677,48 +688,52 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                   const showSeparator = idx > 0 && curDateKey !== lastDateKey;
                   lastDateKey = String(curDateKey);
 
-                  const colReach = fmtNum(r.reach);
-
                   // Do not duplicate reach into engagement if campaign is Alcance or values are equal
                   const isDuplicateReach = r.reach > 0 && r.eng === r.reach;
-                  const colEng =
-                    isAlcanceOnly || isDuplicateReach
-                      ? '—'
-                      : o === 'Eng' ||
-                        o === 'EngLink' ||
-                        o === 'TrafLink' ||
-                        o === 'ReelsEng' ||
-                        o === 'ReelsEngLink' ||
-                        o === 'ReelsTrafLink' ||
-                        o === 'ReelsEngWhats' ||
-                        o === 'ReelsTrafWhats'
-                      ? fmtNum(r.eng)
-                      : '—';
+                  const showEngVal =
+                    !isAlcanceOnly &&
+                    !isDuplicateReach &&
+                    (o === 'Eng' ||
+                      o === 'EngLink' ||
+                      o === 'TrafLink' ||
+                      o === 'ReelsEng' ||
+                      o === 'ReelsEngLink' ||
+                      o === 'ReelsTrafLink' ||
+                      o === 'ReelsEngWhats' ||
+                      o === 'ReelsTrafWhats' ||
+                      r.eng > 0);
+                  const engValue = showEngVal ? r.eng || 0 : 0;
 
-                  const colLinks =
-                    o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink'
-                      ? fmtNum(r.links)
-                      : '—';
+                  const showLinksVal =
+                    o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0;
+                  const linksValue = showLinksVal ? r.links || 0 : 0;
 
-                  const colViews = isReels && r.views > 0 ? fmtNum(r.views) : '—';
-                  const colCPM = o === 'Alc' && r.cpm > 0 ? fmtBRL(r.cpm) : '—';
-                  const colCPC =
-                    (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cpc > 0
-                      ? fmtBRL(r.cpc)
-                      : '—';
-                  const colThru =
-                    (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cThru > 0
-                      ? fmtBRL(r.cThru)
-                      : '—';
-                  const colCInt = (o === 'Eng' || o === 'ReelsEng') && r.cInt > 0 ? fmtBRL(r.cInt) : '—';
-                  const colCConv =
-                    (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.cConv > 0
-                      ? fmtBRL(r.cConv)
-                      : '—';
-                  const colConv =
-                    (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.conv > 0
-                      ? fmtNum(r.conv)
-                      : '—';
+                  const showViewsVal = (isReels || r.views > 0) && r.views > 0;
+                  const viewsValue = showViewsVal ? r.views || 0 : 0;
+
+                  const showCpmVal = o === 'Alc' && r.cpm > 0;
+                  const cpmValue = showCpmVal ? r.cpm || 0 : 0;
+
+                  const showCpcVal =
+                    (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
+                    r.cpc > 0;
+                  const cpcValue = showCpcVal ? r.cpc || 0 : 0;
+
+                  const showCThruVal =
+                    (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
+                    r.cThru > 0;
+                  const cThruValue = showCThruVal ? r.cThru || 0 : 0;
+
+                  const showCIntVal = (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0;
+                  const cIntValue = showCIntVal ? r.cInt || 0 : 0;
+
+                  const showConvVal =
+                    (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+                    r.conv > 0;
+                  const convValue = showConvVal ? r.conv || 0 : 0;
+                  const cConvValue = showConvVal && r.cConv > 0 ? r.cConv : 0;
+
+                  const canEditCell = !isReadOnly && Boolean(onUpdateCampaign);
 
                   return (
                     <React.Fragment key={r.id}>
@@ -729,51 +744,152 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                       )}
                       <tr className="hover:bg-[#1a1c24] transition-colors group">
                         <td className="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white group-hover:text-amber-200 transition-colors">
-                          <span className="block">{titleCase(r.displayName || r.name)}</span>
+                          <EditableText
+                            value={r.displayName || r.name}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { displayName: v })}
+                            isReadOnly={!canEditCell}
+                            placeholder="Nome da ação"
+                            className="font-medium text-white w-full text-[11px]"
+                          />
                           {r.aiNotes && (
-                            <span className="block text-[9px] text-amber-400/80 font-normal mt-0.5">
-                              {r.aiNotes}
-                            </span>
+                            <div className="mt-0.5">
+                              <EditableText
+                                value={r.aiNotes}
+                                onChange={(v) => onUpdateCampaign?.(r.id, { aiNotes: v })}
+                                isReadOnly={!canEditCell}
+                                placeholder="Observação"
+                                className="text-[9px] text-amber-400/80 font-normal w-full"
+                              />
+                            </div>
                           )}
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">
-                          {r.format}
+                          <EditableText
+                            value={r.format || ''}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { format: v })}
+                            isReadOnly={!canEditCell}
+                            placeholder="Formato"
+                            className="text-center text-neutral-300 w-24 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-400">
-                          {r.validity || '—'}
+                          <EditableText
+                            value={r.validity || ''}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { validity: v })}
+                            isReadOnly={!canEditCell}
+                            placeholder="Validade"
+                            className="text-center text-neutral-300 w-24 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          {fmtBRL(r.budget)}
+                          <EditableNumber
+                            value={r.budget}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { budget: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={false}
+                            className="text-right text-neutral-300 w-24 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">
-                          {fmtBRL(r.spent)}
+                          <EditableNumber
+                            value={r.spent}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { spent: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={false}
+                            className="text-right font-bold text-amber-400 w-24 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">
-                          {colReach}
+                          <EditableNumber
+                            value={r.reach}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { reach: v })}
+                            format="int"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={false}
+                            className="text-right font-semibold text-blue-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          {colEng}
+                          <EditableNumber
+                            value={engValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { eng: v })}
+                            format="int"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-neutral-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          {colLinks}
+                          <EditableNumber
+                            value={linksValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { links: v })}
+                            format="int"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-neutral-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">
-                          {colViews}
+                          <EditableNumber
+                            value={viewsValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { views: v })}
+                            format="int"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right font-semibold text-purple-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">
-                          {colCPM}
+                          <EditableNumber
+                            value={cpmValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { cpm: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-blue-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          {colCPC}
+                          <EditableNumber
+                            value={cpcValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { cpc: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-neutral-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">
-                          {colThru}
+                          <EditableNumber
+                            value={cThruValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { cThru: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-purple-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
-                          {colCInt}
+                          <EditableNumber
+                            value={cIntValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { cInt: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-neutral-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">
-                          {colCConv}
+                          <EditableNumber
+                            value={cConvValue}
+                            onChange={(v) => onUpdateCampaign?.(r.id, { cConv: v })}
+                            format="brl"
+                            isReadOnly={!canEditCell}
+                            dashWhenZero={true}
+                            className="text-right text-emerald-300 w-20 text-[11px]"
+                          />
                         </td>
                         <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
                           {isReadOnly ? (
@@ -808,7 +924,20 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           )}
                         </td>
                         <td className="py-2.5 px-2 border-b border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">
-                          {colConv !== '—' ? `${colConv} conv.` : '—'}
+                          {canEditCell ? (
+                            <div className="inline-flex items-center justify-end gap-1">
+                              <EditableNumber
+                                value={convValue}
+                                onChange={(v) => onUpdateCampaign?.(r.id, { conv: v })}
+                                format="int"
+                                dashWhenZero={true}
+                                className="text-right font-bold text-emerald-400 w-16 text-[11px]"
+                              />
+                              {convValue > 0 && <span className="text-[10px]">conv.</span>}
+                            </div>
+                          ) : (
+                            <span>{convValue > 0 ? `${fmtNum(convValue)} conv.` : '—'}</span>
+                          )}
                         </td>
                       </tr>
                     </React.Fragment>

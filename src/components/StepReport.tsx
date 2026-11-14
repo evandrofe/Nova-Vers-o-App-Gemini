@@ -15,6 +15,7 @@ import {
 import { ReporteiPresentationView } from './ReporteiPresentationView';
 import { UnifiedTraditionalTable } from './UnifiedTraditionalTable';
 import { SimpleFunctionalPdfReport } from './SimpleFunctionalPdfReport';
+import { EditableText } from './EditableField';
 
 interface StepReportProps {
   meta: ReportMeta;
@@ -27,8 +28,10 @@ interface StepReportProps {
   initialTab?: 'reportei' | 'table';
   onExportExcel: () => void;
   isExportingExcel: boolean;
-  onExportGoogleSheets?: () => void;
   onBackToCapa: () => void;
+  onUpdateMeta?: (patch: Partial<ReportMeta>) => void;
+  onUpdateCampaign?: (campaignId: string, patch: Partial<CampaignRow>) => void;
+  onUpdateCapaField?: (platform: 'fb' | 'ig', field: keyof CapaData['fb'], value: string) => void;
   onUpdateFiltro?: (campaignId: string, newFiltro: string) => void;
   onUpdateCidade?: (campaignId: string, newCidade: string) => void;
   onBatchUpdateFiltroCidade?: (filtro: string, cidade: string) => void;
@@ -49,7 +52,9 @@ export const StepReport: React.FC<StepReportProps> = ({
   initialTab = 'reportei',
   onExportExcel,
   isExportingExcel,
-  onExportGoogleSheets,
+  onUpdateMeta,
+  onUpdateCampaign,
+  onUpdateCapaField,
   onUpdateFiltro,
   onUpdateCidade,
   onBatchUpdateFiltroCidade,
@@ -159,10 +164,35 @@ export const StepReport: React.FC<StepReportProps> = ({
                 <span aria-hidden="true">·</span>
                 <span>Relatório Mensal</span>
               </div>
-              <h2 className="text-2xl font-bold text-white">
-                {meta.cliente || 'Relatório de Impulsionamento'}{' '}
-                <span className="text-neutral-400 font-normal text-lg">
-                  ({meta.mes} {meta.ano})
+              <h2 className="text-2xl font-bold text-white flex flex-wrap items-center gap-2">
+                <EditableText
+                  value={meta.cliente || ''}
+                  onChange={(v) => onUpdateMeta?.({ cliente: v })}
+                  isReadOnly={!onUpdateMeta}
+                  placeholder="Nome do Cliente"
+                  emptyText="Relatório de Impulsionamento"
+                  className="text-2xl font-bold text-white min-w-[200px]"
+                  title="Editar nome do cliente"
+                />
+                <span className="text-neutral-400 font-normal text-lg inline-flex items-center gap-1">
+                  (
+                  <EditableText
+                    value={meta.mes}
+                    onChange={(v) => onUpdateMeta?.({ mes: v })}
+                    isReadOnly={!onUpdateMeta}
+                    placeholder="Mês"
+                    className="text-neutral-300 font-normal text-lg w-28 text-center"
+                    title="Editar mês"
+                  />
+                  <EditableText
+                    value={meta.ano}
+                    onChange={(v) => onUpdateMeta?.({ ano: v })}
+                    isReadOnly={!onUpdateMeta}
+                    placeholder="Ano"
+                    className="text-neutral-300 font-normal text-lg w-16 text-center"
+                    title="Editar ano"
+                  />
+                  )
                 </span>
               </h2>
               <p className="text-xs text-neutral-400 mt-1">
@@ -183,19 +213,6 @@ export const StepReport: React.FC<StepReportProps> = ({
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>{isExportingExcel ? 'Gerando Planilha...' : 'Baixar Excel (.xlsx)'}</span>
               </button>
-
-              {/* Google Sheets Export Button */}
-              {onExportGoogleSheets && (
-                <button
-                  type="button"
-                  onClick={onExportGoogleSheets}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
-                  title="Enviar este relatório diretamente para o Google Sheets"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  <span>Exportar Google Sheets</span>
-                </button>
-              )}
 
               {/* Client Presentation Mode Toggle */}
               {onTogglePresentationMode && (
@@ -261,11 +278,13 @@ export const StepReport: React.FC<StepReportProps> = ({
             capa={capa}
             onExportExcel={onExportExcel}
             isExportingExcel={isExportingExcel}
-            onExportGoogleSheets={isClientLocked ? undefined : onExportGoogleSheets}
             isPresentationMode={isPresentationMode}
             isClientLocked={isClientLocked}
             onTogglePresentationMode={isClientLocked ? undefined : onTogglePresentationMode}
             onCreateClientLink={onCreateClientLink ? () => onCreateClientLink('reportei') : undefined}
+            onUpdateMeta={isReadOnlyView ? undefined : onUpdateMeta}
+            onUpdateCampaign={isReadOnlyView ? undefined : onUpdateCampaign}
+            onUpdateCapaField={isReadOnlyView ? undefined : onUpdateCapaField}
           />
 
           <UnifiedTraditionalTable
@@ -291,6 +310,8 @@ export const StepReport: React.FC<StepReportProps> = ({
             isPresentationMode={isPresentationMode}
             onTogglePresentationMode={isClientLocked ? undefined : onTogglePresentationMode}
             onCreateClientLink={onCreateClientLink ? () => onCreateClientLink('reportei') : undefined}
+            onUpdateMeta={isReadOnlyView ? undefined : onUpdateMeta}
+            onUpdateCampaign={isReadOnlyView ? undefined : onUpdateCampaign}
             onUpdateFiltro={isReadOnlyView ? undefined : onUpdateFiltro}
             onUpdateCidade={isReadOnlyView ? undefined : onUpdateCidade}
             onBatchUpdateFiltroCidade={isReadOnlyView ? undefined : onBatchUpdateFiltroCidade}

@@ -629,6 +629,73 @@ export function sortCampaignRows(data: CampaignRow[]): void {
   });
 }
 
+export function applyCampaignPatch(
+  prev: CampaignRow,
+  patch: Partial<CampaignRow>
+): CampaignRow {
+  const next: CampaignRow = { ...prev, ...patch };
+
+  const numKeys: Array<keyof CampaignRow> = [
+    'budget', 'spent', 'reach', 'impr', 'eng', 'links', 'views', 'conv',
+    'cpm', 'cpc', 'cThru', 'cInt', 'cConv'
+  ];
+  for (const key of numKeys) {
+    if (key in patch) {
+      const val = Number(next[key]);
+      (next as any)[key] = Number.isFinite(val) && val >= 0 ? val : 0;
+    }
+  }
+
+  const spent = next.spent || 0;
+  const reach = next.reach || 0;
+  const impr = next.impr || 0;
+  const eng = next.eng || 0;
+  const links = next.links || 0;
+  const views = next.views || 0;
+  const conv = next.conv || 0;
+
+  // Recalculate CPM when spent, reach, or impr change (unless cpm itself was directly edited)
+  if (('spent' in patch || 'reach' in patch || 'impr' in patch) && !('cpm' in patch)) {
+    if (spent <= 0) {
+      next.cpm = 0;
+    } else if ('reach' in patch && !('impr' in patch)) {
+      if (impr > 0 && prev.reach > 0 && prev.reach !== reach) {
+        // Scale impr proportionally when user adjusts reach directly so CPM & Frequency stay consistent
+        const ratio = reach / prev.reach;
+        const scaledImpr = Math.max(reach, Math.round(impr * ratio));
+        next.impr = scaledImpr;
+        next.cpm = scaledImpr > 0 ? (spent / scaledImpr) * 1000 : 0;
+      } else {
+        next.cpm = impr > 0 && reach <= impr ? (spent / impr) * 1000 : reach > 0 ? (spent / reach) * 1000 : 0;
+      }
+    } else if (impr > 0) {
+      next.cpm = (spent / impr) * 1000;
+    } else if (reach > 0) {
+      next.cpm = (spent / reach) * 1000;
+    } else {
+      next.cpm = 0;
+    }
+  }
+
+  if (('spent' in patch || 'links' in patch) && !('cpc' in patch)) {
+    next.cpc = spent > 0 && links > 0 ? spent / links : 0;
+  }
+
+  if (('spent' in patch || 'views' in patch) && !('cThru' in patch)) {
+    next.cThru = spent > 0 && views > 0 ? spent / views : 0;
+  }
+
+  if (('spent' in patch || 'eng' in patch) && !('cInt' in patch)) {
+    next.cInt = spent > 0 && eng > 0 ? spent / eng : 0;
+  }
+
+  if (('spent' in patch || 'conv' in patch) && !('cConv' in patch)) {
+    next.cConv = spent > 0 && conv > 0 ? spent / conv : 0;
+  }
+
+  return next;
+}
+
 // Sample demo dataset for immediate test without needing to upload an .xlsx
 export function getSampleDemoData(): { meta: ReportMeta; rows: CampaignRow[]; capa: CapaData } {
   const meta: ReportMeta = {

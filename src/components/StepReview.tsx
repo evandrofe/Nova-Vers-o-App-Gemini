@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { CampaignRow, ObjectiveType, ReportMeta } from '../types';
 import { OBJ_COLORS, OBJ_LABELS, OBJ_OPTIONS } from '../lib/metaAdsParser';
+import { EditableNumber, EditableText } from './EditableField';
 
 interface StepReviewProps {
   meta: ReportMeta;
@@ -21,6 +22,8 @@ interface StepReviewProps {
   batchCidade?: string;
   onChangeBatchFiltro?: (value: string) => void;
   onChangeBatchCidade?: (value: string) => void;
+  onUpdateMeta: (patch: Partial<ReportMeta>) => void;
+  onUpdateCampaign: (campaignId: string, patch: Partial<CampaignRow>) => void;
   onUpdateObjective: (campaignId: string, newObjective: ObjectiveType) => void;
   onUpdateDisplayName: (campaignId: string, newDisplayName: string) => void;
   onUpdateFormat: (campaignId: string, newFormat: string) => void;
@@ -39,6 +42,8 @@ export const StepReview: React.FC<StepReviewProps> = ({
   batchCidade: externalBatchCidade,
   onChangeBatchFiltro,
   onChangeBatchCidade,
+  onUpdateMeta,
+  onUpdateCampaign,
   onUpdateObjective,
   onUpdateDisplayName,
   onUpdateFormat,
@@ -106,13 +111,34 @@ export const StepReview: React.FC<StepReviewProps> = ({
               </span>
               <span className="text-xs text-neutral-400">Revisão de Metadados e Objetivos</span>
             </div>
-            <h2 className="text-2xl font-bold text-white">
-              {meta.cliente || 'Cliente Detectado'}{' '}
-              <span className="text-neutral-400 font-normal text-lg">
-                ({meta.mes} {meta.ano})
-              </span>
-            </h2>
-            <p className="text-xs text-neutral-400 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <EditableText
+                value={meta.cliente}
+                onChange={(v) => onUpdateMeta({ cliente: v })}
+                placeholder="Nome do Cliente"
+                className="text-2xl font-bold text-white bg-[#1a1b20] border-[#2e3037] min-w-[200px]"
+                title="Editar nome do cliente"
+              />
+              <div className="flex items-center gap-1.5 text-neutral-400 text-lg">
+                <span>(</span>
+                <EditableText
+                  value={meta.mes}
+                  onChange={(v) => onUpdateMeta({ mes: v })}
+                  placeholder="Mês"
+                  className="text-base font-normal text-neutral-200 bg-[#1a1b20] border-[#2e3037] w-28 text-center"
+                  title="Editar mês de referência"
+                />
+                <EditableText
+                  value={meta.ano}
+                  onChange={(v) => onUpdateMeta({ ano: v })}
+                  placeholder="Ano"
+                  className="text-base font-normal text-neutral-200 bg-[#1a1b20] border-[#2e3037] w-16 text-center"
+                  title="Editar ano de referência"
+                />
+                <span>)</span>
+              </div>
+            </div>
+            <p className="text-xs text-neutral-400 mt-1.5">
               Arquivo: <code className="text-amber-300/80 font-mono">{meta.originalFileName}</code>
             </p>
           </div>
@@ -317,9 +343,14 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         </span>
 
                         {c.aiNotes && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 w-fit">
+                          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 w-full">
                             <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-                            <span>{c.aiNotes}</span>
+                            <EditableText
+                              value={c.aiNotes}
+                              onChange={(v) => onUpdateCampaign(c.id, { aiNotes: v })}
+                              placeholder="Observação..."
+                              className="text-[10px] text-amber-300 w-full px-1 py-0"
+                            />
                           </div>
                         )}
                       </div>
@@ -336,8 +367,15 @@ export const StepReview: React.FC<StepReviewProps> = ({
                     </td>
 
                     {/* Validity */}
-                    <td className="py-3 px-3 whitespace-nowrap text-neutral-400">
-                      {c.validity || '—'}
+                    <td className="py-3 px-3 whitespace-nowrap text-neutral-300">
+                      <input
+                        type="text"
+                        placeholder="Ex: 01 a 31/10"
+                        value={c.validity || ''}
+                        onChange={(e) => onUpdateCampaign(c.id, { validity: e.target.value })}
+                        className="bg-[#111215] border border-[#2e3037] focus:border-amber-400 rounded px-2 py-1 text-xs text-neutral-200 w-28 focus:outline-none"
+                        title="Editar validade / período"
+                      />
                     </td>
 
                     {/* Objective Badge */}
@@ -351,12 +389,24 @@ export const StepReview: React.FC<StepReviewProps> = ({
 
                     {/* Spent */}
                     <td className="py-3 px-3 whitespace-nowrap text-right font-medium text-white">
-                      R$ {c.spent > 0 ? c.spent.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
+                      <EditableNumber
+                        value={c.spent}
+                        onChange={(val) => onUpdateCampaign(c.id, { spent: val })}
+                        format="brl"
+                        dashWhenZero={false}
+                        className="text-right font-medium text-white w-24 border-[#2e3037] bg-[#111215]"
+                      />
                     </td>
 
                     {/* Reach */}
                     <td className="py-3 px-3 whitespace-nowrap text-right text-neutral-300">
-                      {c.reach > 0 ? c.reach.toLocaleString('pt-BR') : '—'}
+                      <EditableNumber
+                        value={c.reach}
+                        onChange={(val) => onUpdateCampaign(c.id, { reach: val })}
+                        format="int"
+                        dashWhenZero={true}
+                        className="text-right text-neutral-200 w-20 border-[#2e3037] bg-[#111215]"
+                      />
                     </td>
 
                     {/* Main Metric */}
@@ -366,17 +416,61 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         const isEngEqualToReach = c.reach > 0 && c.eng === c.reach;
                         const shouldSuppressEng = isAlcance && (isEngEqualToReach || c.objective === 'Alc');
 
-                        if (c.conv > 0) {
-                          return <span className="text-emerald-400 font-semibold">{c.conv} conversas</span>;
+                        if (c.conv > 0 || /Whats/i.test(c.objective)) {
+                          return (
+                            <div className="inline-flex items-center gap-1 justify-end">
+                              <EditableNumber
+                                value={c.conv}
+                                onChange={(val) => onUpdateCampaign(c.id, { conv: val })}
+                                format="int"
+                                dashWhenZero={false}
+                                className="text-right text-emerald-400 font-semibold w-16 border-[#2e3037] bg-[#111215]"
+                              />
+                              <span className="text-emerald-400 text-[11px]">conv.</span>
+                            </div>
+                          );
                         }
-                        if (isReels && c.views > 0) {
-                          return <span className="text-amber-400 font-semibold">{c.views.toLocaleString('pt-BR')} views</span>;
+                        if (isReels) {
+                          return (
+                            <div className="inline-flex items-center gap-1 justify-end">
+                              <EditableNumber
+                                value={c.views}
+                                onChange={(val) => onUpdateCampaign(c.id, { views: val })}
+                                format="int"
+                                dashWhenZero={false}
+                                className="text-right text-amber-400 font-semibold w-20 border-[#2e3037] bg-[#111215]"
+                              />
+                              <span className="text-amber-400 text-[11px]">views</span>
+                            </div>
+                          );
                         }
-                        if (c.links > 0) {
-                          return <span className="text-cyan-300">{c.links.toLocaleString('pt-BR')} cliques</span>;
+                        if (c.links > 0 || /Link/i.test(c.objective)) {
+                          return (
+                            <div className="inline-flex items-center gap-1 justify-end">
+                              <EditableNumber
+                                value={c.links}
+                                onChange={(val) => onUpdateCampaign(c.id, { links: val })}
+                                format="int"
+                                dashWhenZero={false}
+                                className="text-right text-cyan-300 font-semibold w-16 border-[#2e3037] bg-[#111215]"
+                              />
+                              <span className="text-cyan-300 text-[11px]">cliques</span>
+                            </div>
+                          );
                         }
-                        if (c.eng > 0 && !shouldSuppressEng) {
-                          return <span className="text-purple-300">{c.eng.toLocaleString('pt-BR')} engaj.</span>;
+                        if (!shouldSuppressEng) {
+                          return (
+                            <div className="inline-flex items-center gap-1 justify-end">
+                              <EditableNumber
+                                value={c.eng}
+                                onChange={(val) => onUpdateCampaign(c.id, { eng: val })}
+                                format="int"
+                                dashWhenZero={false}
+                                className="text-right text-purple-300 font-semibold w-16 border-[#2e3037] bg-[#111215]"
+                              />
+                              <span className="text-purple-300 text-[11px]">engaj.</span>
+                            </div>
+                          );
                         }
                         return <span className="text-neutral-500">—</span>;
                       })()}

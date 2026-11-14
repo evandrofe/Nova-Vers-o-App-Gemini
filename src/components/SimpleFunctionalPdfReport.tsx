@@ -47,14 +47,6 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
     return new Intl.NumberFormat('pt-BR').format(v);
   };
 
-  const titleCase = (str: string) => {
-    return (str || '')
-      .toLowerCase()
-      .split(' ')
-      .map((w) => (w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-      .join(' ');
-  };
-
   // Consolidated Meta Ads Metrics (matching ReporteiPresentationView & UnifiedTraditionalTable)
   const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
   const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
@@ -713,32 +705,40 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
                     o === 'ReelsEngLink' ||
                     o === 'ReelsTrafLink' ||
                     o === 'ReelsEngWhats' ||
-                    o === 'ReelsTrafWhats'
+                    o === 'ReelsTrafWhats' ||
+                    r.eng > 0
                   ? fmtNum(r.eng)
                   : '—';
 
               const colLinks =
-                o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink'
+                o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0
                   ? fmtNum(r.links)
                   : '—';
 
-              const colViews = isReels && r.views > 0 ? fmtNum(r.views) : '—';
+              const colViews = (isReels || r.views > 0) && r.views > 0 ? fmtNum(r.views) : '—';
               const colCPM = o === 'Alc' && r.cpm > 0 ? fmtBRL(r.cpm) : '—';
               const colCPC =
-                (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cpc > 0
+                (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
+                r.cpc > 0
                   ? fmtBRL(r.cpc)
                   : '—';
               const colThru =
-                (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cThru > 0
+                (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
+                r.cThru > 0
                   ? fmtBRL(r.cThru)
                   : '—';
-              const colCInt = (o === 'Eng' || o === 'ReelsEng') && r.cInt > 0 ? fmtBRL(r.cInt) : '—';
+              const colCInt =
+                (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0
+                  ? fmtBRL(r.cInt)
+                  : '—';
               const colCConv =
-                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.cConv > 0
+                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+                r.cConv > 0
                   ? fmtBRL(r.cConv)
                   : '—';
               const colConv =
-                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.conv > 0
+                (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+                r.conv > 0
                   ? fmtNum(r.conv)
                   : '—';
 
@@ -751,7 +751,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
                   )}
                   <tr className="print-avoid-break">
                     <td className="py-1.5 px-1.5 border-r border-[#23252b] text-left font-medium text-white break-words leading-tight">
-                      {titleCase(r.displayName || r.name)}
+                      {r.displayName || r.name}
                     </td>
                     <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-300 break-words">
                       {r.format}

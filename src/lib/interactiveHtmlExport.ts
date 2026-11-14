@@ -11,14 +11,6 @@ function escapeHtml(val: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-function titleCase(str: string): string {
-  return (str || '')
-    .toLowerCase()
-    .split(' ')
-    .map((w) => (w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(' ');
-}
-
 export function exportInteractiveWebReport(
   meta: ReportMeta,
   campaigns: CampaignRow[],
@@ -597,32 +589,40 @@ function buildCostSheetFragments(campaigns: CampaignRow[]) {
             o === 'ReelsEngLink' ||
             o === 'ReelsTrafLink' ||
             o === 'ReelsEngWhats' ||
-            o === 'ReelsTrafWhats'
+            o === 'ReelsTrafWhats' ||
+            r.eng > 0
           ? fmtNum(r.eng)
           : '—';
 
       const colLinks =
-        o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink'
+        o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0
           ? fmtNum(r.links)
           : '—';
 
-      const colViews = isReels && r.views > 0 ? fmtNum(r.views) : '—';
+      const colViews = (isReels || r.views > 0) && r.views > 0 ? fmtNum(r.views) : '—';
       const colCPM = o === 'Alc' && r.cpm > 0 ? fmtBRL(r.cpm) : '—';
       const colCPC =
-        (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cpc > 0
+        (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
+        r.cpc > 0
           ? fmtBRL(r.cpc)
           : '—';
       const colThru =
-        (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cThru > 0
+        (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
+        r.cThru > 0
           ? fmtBRL(r.cThru)
           : '—';
-      const colCInt = (o === 'Eng' || o === 'ReelsEng') && r.cInt > 0 ? fmtBRL(r.cInt) : '—';
+      const colCInt =
+        (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0
+          ? fmtBRL(r.cInt)
+          : '—';
       const colCConv =
-        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.cConv > 0
+        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+        r.cConv > 0
           ? fmtBRL(r.cConv)
           : '—';
       const colConv =
-        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.conv > 0
+        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+        r.conv > 0
           ? fmtNum(r.conv)
           : '—';
 
@@ -637,7 +637,7 @@ function buildCostSheetFragments(campaigns: CampaignRow[]) {
       return `${separatorHtml}
       <tr class="campaign-row hover:bg-[#1a1c24] transition-colors" data-search="${searchBlob}">
         <td class="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white">
-          <span class="block">${escapeHtml(titleCase(r.displayName || r.name))}</span>
+          <span class="block">${escapeHtml(r.displayName || r.name)}</span>
           ${r.aiNotes ? `<span class="block text-[9px] text-amber-400/80 font-normal mt-0.5">${escapeHtml(r.aiNotes)}</span>` : ''}
         </td>
         <td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">${escapeHtml(r.format || '—')}</td>
@@ -909,32 +909,40 @@ export function exportCostSheetWebReport(
             o === 'ReelsEngLink' ||
             o === 'ReelsTrafLink' ||
             o === 'ReelsEngWhats' ||
-            o === 'ReelsTrafWhats'
+            o === 'ReelsTrafWhats' ||
+            r.eng > 0
           ? fmtNum(r.eng)
           : '—';
 
       const colLinks =
-        o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink'
+        o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0
           ? fmtNum(r.links)
           : '—';
 
-      const colViews = isReels && r.views > 0 ? fmtNum(r.views) : '—';
+      const colViews = (isReels || r.views > 0) && r.views > 0 ? fmtNum(r.views) : '—';
       const colCPM = o === 'Alc' && r.cpm > 0 ? fmtBRL(r.cpm) : '—';
       const colCPC =
-        (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cpc > 0
+        (o === 'EngLink' || o === 'TrafLink' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.links > 0) &&
+        r.cpc > 0
           ? fmtBRL(r.cpc)
           : '—';
       const colThru =
-        (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink') && r.cThru > 0
+        (o === 'ReelsAlc' || o === 'ReelsEng' || o === 'ReelsEngLink' || o === 'ReelsTrafLink' || r.views > 0) &&
+        r.cThru > 0
           ? fmtBRL(r.cThru)
           : '—';
-      const colCInt = (o === 'Eng' || o === 'ReelsEng') && r.cInt > 0 ? fmtBRL(r.cInt) : '—';
+      const colCInt =
+        (o === 'Eng' || o === 'ReelsEng' || (!isAlcanceOnly && !isDuplicateReach && r.eng > 0)) && r.cInt > 0
+          ? fmtBRL(r.cInt)
+          : '—';
       const colCConv =
-        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.cConv > 0
+        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+        r.cConv > 0
           ? fmtBRL(r.cConv)
           : '—';
       const colConv =
-        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats') && r.conv > 0
+        (o === 'EngWhats' || o === 'TrafWhats' || o === 'ReelsEngWhats' || o === 'ReelsTrafWhats' || r.conv > 0) &&
+        r.conv > 0
           ? fmtNum(r.conv)
           : '—';
 
@@ -949,7 +957,7 @@ export function exportCostSheetWebReport(
       return `${separatorHtml}
       <tr class="campaign-row hover:bg-[#1a1c24] transition-colors" data-search="${searchBlob}">
         <td class="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white">
-          <span class="block">${escapeHtml(titleCase(r.displayName || r.name))}</span>
+          <span class="block">${escapeHtml(r.displayName || r.name)}</span>
           ${r.aiNotes ? `<span class="block text-[9px] text-amber-400/80 font-normal mt-0.5">${escapeHtml(r.aiNotes)}</span>` : ''}
         </td>
         <td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">${escapeHtml(r.format || '—')}</td>

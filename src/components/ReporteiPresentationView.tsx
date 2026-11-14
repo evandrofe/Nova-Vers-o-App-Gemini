@@ -17,10 +17,12 @@ import {
   Maximize2,
   Minimize2
 } from 'lucide-react';
-import { CampaignRow, CapaData, ReportMeta } from '../types';
+import { CampaignRow, CapaData, ObjectiveType, ReportMeta } from '../types';
+import { OBJ_LABELS, OBJ_OPTIONS } from '../lib/metaAdsParser';
 import { BudgetDonutChart } from './BudgetDonutChart';
 import { exportInteractiveWebReport } from '../lib/interactiveHtmlExport';
 import { SocialAudienceSection } from './SocialAudienceSection';
+import { EditableNumber, EditableText } from './EditableField';
 
 interface ReporteiPresentationViewProps {
   meta: ReportMeta;
@@ -28,11 +30,13 @@ interface ReporteiPresentationViewProps {
   capa: CapaData;
   onExportExcel: () => void;
   isExportingExcel: boolean;
-  onExportGoogleSheets?: () => void;
   isPresentationMode?: boolean;
   isClientLocked?: boolean;
   onTogglePresentationMode?: () => void;
   onCreateClientLink?: () => Promise<string>;
+  onUpdateMeta?: (patch: Partial<ReportMeta>) => void;
+  onUpdateCampaign?: (campaignId: string, patch: Partial<CampaignRow>) => void;
+  onUpdateCapaField?: (platform: 'fb' | 'ig', field: keyof CapaData['fb'], value: string) => void;
 }
 
 interface KpiBoxConfig {
@@ -56,12 +60,15 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
   capa,
   onExportExcel,
   isExportingExcel,
-  onExportGoogleSheets,
   isPresentationMode = false,
   isClientLocked = false,
   onTogglePresentationMode,
   onCreateClientLink,
+  onUpdateMeta,
+  onUpdateCampaign,
+  onUpdateCapaField,
 }) => {
+  const isReadOnly = isPresentationMode || isClientLocked;
   const [copiedLink, setCopiedLink] = useState(false);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [generatedLinkUrl, setGeneratedLinkUrl] = useState<string | null>(null);
@@ -292,17 +299,46 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-400">
                 <span>Relatório Mensal</span>
                 <span className="text-neutral-600">·</span>
-                <span className="text-neutral-400 font-mono normal-case tracking-normal">
-                  {meta.mes} {meta.ano}
-                </span>
+                <div className="inline-flex items-center gap-1 text-neutral-300 font-mono normal-case tracking-normal">
+                  <EditableText
+                    value={meta.mes}
+                    onChange={(v) => onUpdateMeta?.({ mes: v })}
+                    isReadOnly={isReadOnly || !onUpdateMeta}
+                    placeholder="Mês"
+                    className="text-neutral-300 font-mono text-[11px] w-24 text-center"
+                    title="Editar mês"
+                  />
+                  <EditableText
+                    value={meta.ano}
+                    onChange={(v) => onUpdateMeta?.({ ano: v })}
+                    isReadOnly={isReadOnly || !onUpdateMeta}
+                    placeholder="Ano"
+                    className="text-neutral-300 font-mono text-[11px] w-14 text-center"
+                    title="Editar ano"
+                  />
+                </div>
               </div>
 
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
-                Relatório de {meta.cliente || 'Cliente'}
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1 flex flex-wrap items-center gap-1.5">
+                <span>Relatório de</span>
+                <EditableText
+                  value={meta.cliente || ''}
+                  onChange={(v) => onUpdateMeta?.({ cliente: v })}
+                  isReadOnly={isReadOnly || !onUpdateMeta}
+                  placeholder="Nome do Cliente"
+                  emptyText="Cliente"
+                  className="text-2xl sm:text-3xl font-black text-white tracking-tight min-w-[180px]"
+                  title="Editar nome do cliente"
+                />
               </h1>
               <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
                 Análise de Desempenho dos Anúncios e Campanhas Pagas • Base de dados oficial da Meta
               </p>
+              {!isReadOnly && (
+                <p className="text-[11px] text-amber-300/90 mt-1.5 no-print">
+                  Edição livre ativa: clique em qualquer texto, valor ou métrica abaixo para ajustar manualmente (as contas matemáticas se atualizam sozinhas).
+                </p>
+              )}
             </div>
           </div>
 
@@ -364,19 +400,6 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
               <FileSpreadsheet className="w-4 h-4" />
               <span>{isExportingExcel ? 'Gerando...' : 'Planilha'}</span>
             </button>
-
-            {/* Google Sheets Export */}
-            {!isClientLocked && onExportGoogleSheets && (
-              <button
-                type="button"
-                onClick={onExportGoogleSheets}
-                className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
-                title="Enviar relatório formatado diretamente para o Google Sheets"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                <span>Google Sheets</span>
-              </button>
-            )}
 
             {/* Toggle Full Presentation Mode */}
             {onTogglePresentationMode && (
@@ -585,39 +608,48 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredCampaigns.map((c, index) => {
-            const isTopConv = c.conv > 0 && c.conv >= Math.max(...campaigns.map((x) => x.conv));
-            const isTopReach = c.reach >= Math.max(...campaigns.map((x) => x.reach));
+            const maxConv = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.conv || 0)) : 0;
+            const maxReach = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.reach || 0)) : 0;
+            const isTopConv = c.conv > 0 && c.conv >= maxConv;
+            const isTopReach = c.reach > 0 && c.reach >= maxReach;
             const isReels = /^Reels/i.test(c.objective) || c.views > 0;
 
             let badge = 'Alcance';
             let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+            let primaryField: 'conv' | 'views' | 'links' | 'reach' = 'reach';
             let primaryResultLabel = 'ALCANCE';
-            let primaryResultVal = fmtNum(c.reach);
+            let primaryResultUnit = 'contas';
+            let unitCostField: 'cConv' | 'cThru' | 'cpc' | 'cpm' = 'cpm';
             let unitCostLabel = 'CPM';
-            let unitCostVal = c.cpm > 0 ? fmtBRL(c.cpm) : '—';
 
-            if (c.conv > 0) {
+            if (c.conv > 0 || /Whats/i.test(c.objective)) {
               badge = 'WhatsApp Lead';
               badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+              primaryField = 'conv';
               primaryResultLabel = 'CONVERSAS';
-              primaryResultVal = `${c.conv} iniciadas`;
+              primaryResultUnit = 'iniciadas';
+              unitCostField = 'cConv';
               unitCostLabel = 'CUSTO / CONV.';
-              unitCostVal = c.cConv > 0 ? fmtBRL(c.cConv) : '—';
             } else if (isReels) {
               badge = 'Reels / Vídeo';
               badgeClass = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+              primaryField = 'views';
               primaryResultLabel = 'THRUPLAY';
-              primaryResultVal = `${fmtNum(c.views)} views`;
+              primaryResultUnit = 'views';
+              unitCostField = 'cThru';
               unitCostLabel = 'CUSTO / VIEW';
-              unitCostVal = c.cThru > 0 ? fmtBRL(c.cThru) : '—';
-            } else if (c.links > 0) {
+            } else if (c.links > 0 || /Link/i.test(c.objective)) {
               badge = 'Tráfego Link';
               badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+              primaryField = 'links';
               primaryResultLabel = 'CLIQUES LINK';
-              primaryResultVal = `${fmtNum(c.links)} cliques`;
+              primaryResultUnit = 'cliques';
+              unitCostField = 'cpc';
               unitCostLabel = 'CPC';
-              unitCostVal = c.cpc > 0 ? fmtBRL(c.cpc) : '—';
             }
+
+            const primaryValue = c[primaryField] || 0;
+            const unitCostValue = c[unitCostField] || 0;
 
             return (
               <div
@@ -625,13 +657,36 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                 className="bg-neutral-900/70 border border-neutral-800 hover:border-neutral-700 p-5 rounded-2xl transition-all shadow-md group"
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badgeClass}`}>
-                        {badge}
-                      </span>
-                      <span className="text-[10px] text-neutral-400 font-medium">
-                        Formato: <strong className="text-neutral-200">{c.format || 'Anúncio'}</strong>
+                      {!isReadOnly && onUpdateCampaign ? (
+                        <select
+                          value={c.objective}
+                          onChange={(e) => onUpdateCampaign(c.id, { objective: e.target.value as ObjectiveType })}
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border cursor-pointer focus:outline-none ${badgeClass}`}
+                          title="Alterar objetivo estratégico"
+                        >
+                          {OBJ_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt} className="bg-[#141518] text-white normal-case">
+                              {OBJ_LABELS[opt]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badgeClass}`}>
+                          {badge}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-neutral-400 font-medium inline-flex items-center gap-1">
+                        Formato:{' '}
+                        <EditableText
+                          value={c.format || ''}
+                          onChange={(v) => onUpdateCampaign?.(c.id, { format: v })}
+                          isReadOnly={isReadOnly || !onUpdateCampaign}
+                          placeholder="Anúncio"
+                          emptyText="Anúncio"
+                          className="text-neutral-200 font-bold text-[10px] w-24"
+                        />
                       </span>
                       {isTopConv && (
                         <span className="text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded">
@@ -645,21 +700,54 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                       )}
                     </div>
 
-                    <h4 className="text-sm font-extrabold text-white group-hover:text-amber-400 transition-colors truncate">
-                      {c.displayName || c.name}
-                    </h4>
-                    <p className="text-[11px] text-neutral-400 mt-0.5">
-                      Período de Veiculação: <span className="text-neutral-300">{c.validity || 'Mês vigente'}</span>
-                    </p>
+                    <div className="mb-1">
+                      <EditableText
+                        value={c.displayName || c.name}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { displayName: v })}
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        placeholder="Nome da Ação"
+                        className="text-sm font-extrabold text-white group-hover:text-amber-400 transition-colors w-full"
+                        title="Editar título da ação"
+                      />
+                    </div>
+                    <div className="text-[11px] text-neutral-400 flex items-center gap-1 flex-wrap">
+                      <span>Período de Veiculação:</span>
+                      <EditableText
+                        value={c.validity || ''}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { validity: v })}
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        placeholder="Mês vigente"
+                        emptyText="Mês vigente"
+                        className="text-neutral-300 text-[11px] w-32"
+                        title="Editar período de veiculação"
+                      />
+                    </div>
                   </div>
 
                   <div className="text-right shrink-0 font-mono tabular-nums">
-                    <span className="text-sm font-black text-white block">
-                      {fmtBRL(c.spent)}
-                    </span>
-                    <span className="text-[10px] text-neutral-500 block">
-                      Orçado: {fmtBRL(c.budget)}
-                    </span>
+                    <div className="text-sm font-black text-white">
+                      <EditableNumber
+                        value={c.spent}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { spent: v })}
+                        format="brl"
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        dashWhenZero={false}
+                        className="text-right text-sm font-black text-white w-28"
+                        title="Editar Valor Gasto (atualiza totais e custos unitários)"
+                      />
+                    </div>
+                    <div className="text-[10px] text-neutral-500 flex items-center justify-end gap-1">
+                      <span>Orçado:</span>
+                      <EditableNumber
+                        value={c.budget}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { budget: v })}
+                        format="brl"
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        dashWhenZero={false}
+                        className="text-right text-[10px] text-neutral-400 w-24"
+                        title="Editar Orçamento"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -669,29 +757,72 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                     <span className="text-neutral-500 block text-[9.5px] uppercase font-bold tracking-tight">
                       {primaryResultLabel}
                     </span>
-                    <span className="text-amber-400 font-extrabold block truncate mt-0.5">
-                      {primaryResultVal}
-                    </span>
+                    <div className="text-amber-400 font-extrabold mt-0.5 flex items-center gap-1">
+                      <EditableNumber
+                        value={primaryValue}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { [primaryField]: v })}
+                        format="int"
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        dashWhenZero={false}
+                        className="text-amber-400 font-extrabold w-20"
+                        title={`Editar ${primaryResultLabel}`}
+                      />
+                      {primaryField !== 'reach' && (
+                        <span className="text-[10px] text-amber-300/80 truncate">{primaryResultUnit}</span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="bg-neutral-950/50 p-2 rounded-xl border border-neutral-800/80">
                     <span className="text-neutral-500 block text-[9.5px] uppercase font-bold tracking-tight">
                       ALCANCE ÚNICO
                     </span>
-                    <span className="text-neutral-200 font-bold block truncate mt-0.5">
-                      {fmtNum(c.reach)} contas
-                    </span>
+                    <div className="text-neutral-200 font-bold mt-0.5 flex items-center gap-1">
+                      <EditableNumber
+                        value={c.reach}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { reach: v })}
+                        format="int"
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        dashWhenZero={false}
+                        className="text-neutral-200 font-bold w-20"
+                        title="Editar Alcance Único"
+                      />
+                      <span className="text-[10px] text-neutral-400">contas</span>
+                    </div>
                   </div>
 
                   <div className="bg-neutral-950/50 p-2 rounded-xl border border-neutral-800/80 text-right">
                     <span className="text-neutral-500 block text-[9.5px] uppercase font-bold tracking-tight">
                       {unitCostLabel}
                     </span>
-                    <span className="text-white font-black block truncate mt-0.5">
-                      {unitCostVal}
-                    </span>
+                    <div className="text-white font-black mt-0.5">
+                      <EditableNumber
+                        value={unitCostValue}
+                        onChange={(v) => onUpdateCampaign?.(c.id, { [unitCostField]: v })}
+                        format="brl"
+                        isReadOnly={isReadOnly || !onUpdateCampaign}
+                        dashWhenZero={true}
+                        className="text-right text-white font-black w-20"
+                        title={`Calculado automaticamente (clique para ajustar ${unitCostLabel})`}
+                      />
+                    </div>
                   </div>
                 </div>
+
+                {/* Impressions quick edit bar (only in editor mode) */}
+                {!isReadOnly && onUpdateCampaign && (
+                  <div className="mt-2 pt-2 border-t border-neutral-800/60 flex items-center justify-between text-[10px] text-neutral-400 no-print">
+                    <span>Impressões (Frequência e CTR):</span>
+                    <EditableNumber
+                      value={c.impr || 0}
+                      onChange={(v) => onUpdateCampaign(c.id, { impr: v })}
+                      format="int"
+                      dashWhenZero={false}
+                      className="text-right text-[10.5px] text-purple-300 font-semibold w-24"
+                      title="Editar Impressões da campanha"
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -701,7 +832,11 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
       {/* ======================================================================== */}
       {/* SECTION: BASE DE AUDIÊNCIA SOCIAL (PREENCHIDA NA ETAPA ANTERIOR) */}
       {/* ======================================================================== */}
-      <SocialAudienceSection capa={capa} />
+      <SocialAudienceSection
+        capa={capa}
+        isReadOnly={isReadOnly}
+        onUpdateCapaField={onUpdateCapaField}
+      />
     </div>
   );
 };
