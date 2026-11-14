@@ -113,12 +113,56 @@ export function exportInteractiveWebReport(
       display: inline-flex !important;
     }
     @media print {
+      @page {
+        size: A4 landscape;
+        margin: 6mm;
+      }
       .no-print { display: none !important; }
+      header { position: static !important; }
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
-      body { background: white !important; color: black !important; }
+      html, body {
+        background-color: #0b0c0e !important;
+        color: #e5e7eb !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      main {
+        max-width: 100% !important;
+        padding: 4mm 0 !important;
+      }
+      .overflow-x-auto {
+        overflow: visible !important;
+        max-height: none !important;
+      }
+      table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        font-size: 7.5px !important;
+      }
+      th, td {
+        min-width: 0 !important;
+        padding: 4px 3px !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+      th button {
+        padding: 4px 2px !important;
+        white-space: normal !important;
+      }
+      thead { display: table-header-group; }
+      tfoot { display: table-row-group; }
+      tr, .guide-card, .bg-neutral-900\/70, .bg-neutral-900\/80 {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      #planilha-custos-tabela, #guia-17-colunas {
+        page-break-before: always;
+        break-before: page;
+      }
     }
   </style>
 </head>
@@ -1005,12 +1049,55 @@ export function exportCostSheetWebReport(
       display: inline-flex !important;
     }
     @media print {
+      @page {
+        size: A4 landscape;
+        margin: 6mm;
+      }
       .no-print { display: none !important; }
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
-      body { background: white !important; color: black !important; }
+      html, body {
+        background-color: #0b0c0e !important;
+        color: #e5e7eb !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      main {
+        max-width: 100% !important;
+        padding: 4mm 0 !important;
+      }
+      .overflow-x-auto {
+        overflow: visible !important;
+        max-height: none !important;
+      }
+      table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        font-size: 7.5px !important;
+      }
+      th, td {
+        min-width: 0 !important;
+        padding: 4px 3px !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+      th button {
+        padding: 4px 2px !important;
+        white-space: normal !important;
+      }
+      thead { display: table-header-group; }
+      tfoot { display: table-row-group; }
+      tr, .guide-card {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      #guia-17-colunas {
+        page-break-before: always;
+        break-before: page;
+      }
     }
   </style>
 </head>

@@ -17,7 +17,7 @@
 @media print {
   @page {
     size: A4 landscape;
-    margin: 8mm;
+    margin: 6mm;
   }
 
   * {
@@ -39,10 +39,10 @@
     display: block !important;
   }
 
+  html,
   body {
-    background-color: #ffffff !important;
-    color: #111827 !important;
-    font-size: 10px !important;
+    background-color: #0b0c0e !important;
+    color: #e5e7eb !important;
     padding: 0 !important;
     margin: 0 !important;
   }
@@ -53,6 +53,26 @@
     margin: 0 !important;
   }
 
+  .print-report-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-row-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   .print-page-break {
     page-break-before: always;
     break-before: page;
@@ -61,13 +81,5 @@
   .print-avoid-break {
     page-break-inside: avoid;
     break-inside: avoid;
-  }
-
-  /* Force white backgrounds and dark text inside cards for print */
-  .print-card {
-    background-color: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    color: #111827 !important;
-    box-shadow: none !important;
   }
 }

@@ -109,7 +109,7 @@ export const StepReport: React.FC<StepReportProps> = ({
                     <span>Prévia do Relatório PDF</span>
                   </h3>
                   <p className="text-[11px] text-neutral-400">
-                    Resumo Executivo, Base de Audiência Social, Tabelas de Custos dos Impulsionamentos e Legendas
+                    Modelo idêntico à apresentação online: KPIs, Gráfico de Verba, Destaques, Audiência Social, Planilha de 17 Colunas e Glossário
                   </p>
                 </div>
               </div>
@@ -135,7 +135,7 @@ export const StepReport: React.FC<StepReportProps> = ({
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-neutral-200">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#07080a]">
               <SimpleFunctionalPdfReport
                 meta={meta}
                 campaigns={campaigns}
