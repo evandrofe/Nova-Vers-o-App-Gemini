@@ -350,7 +350,7 @@ export async function exportToExcel(
     cSocTitle.border = { bottom: bkCardDark };
     destCurRow++;
 
-    // Card Headers (Side by Side: B..F = Instagram Business | G..K = Facebook Page)
+    // Card Headers (Side by Side: B..F = INSTAGRAM | G..K = FACEBOOK)
     const rCardHead = wsDest.getRow(destCurRow);
     rCardHead.height = 26;
 
@@ -360,7 +360,7 @@ export async function exportToExcel(
     wsDest.mergeCells(`J${destCurRow}:K${destCurRow}`);
 
     const cIgHead = wsDest.getCell(`B${destCurRow}`);
-    cIgHead.value = 'INSTAGRAM BUSINESS';
+    cIgHead.value = 'INSTAGRAM';
     cIgHead.fill = fl(C.cardDark);
     cIgHead.font = fn(true, 10.5, C.rose);
     cIgHead.alignment = al('left', 'middle');
@@ -374,7 +374,7 @@ export async function exportToExcel(
     cIgSegCount.border = { top: bkCardDark, right: bkCardDark, bottom: bkCardDark };
 
     const cFbHead = wsDest.getCell(`G${destCurRow}`);
-    cFbHead.value = 'FACEBOOK PAGE';
+    cFbHead.value = 'FACEBOOK';
     cFbHead.fill = fl(C.cardDark);
     cFbHead.font = fn(true, 10.5, C.blue);
     cFbHead.alignment = al('left', 'middle');

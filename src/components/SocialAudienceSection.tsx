@@ -52,7 +52,7 @@ export const SocialAudienceSection: React.FC<SocialAudienceSectionProps> = ({
         <div className="bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
           <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-800/80">
             <strong className="text-rose-400 text-sm font-bold uppercase tracking-wide">
-              Instagram Business
+              INSTAGRAM
             </strong>
             <div className="flex items-center gap-1 text-xs font-mono font-bold text-white tabular-nums">
               <EditableText
@@ -134,7 +134,7 @@ export const SocialAudienceSection: React.FC<SocialAudienceSectionProps> = ({
         <div className="bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
           <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-800/80">
             <strong className="text-blue-400 text-sm font-bold uppercase tracking-wide">
-              Facebook Page
+              FACEBOOK
             </strong>
             <div className="flex items-center gap-1 text-xs font-mono font-bold text-white tabular-nums">
               <EditableText

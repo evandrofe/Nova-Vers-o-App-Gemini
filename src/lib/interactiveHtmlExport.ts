@@ -403,7 +403,7 @@ export function exportInteractiveWebReport(
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
             <div class="flex items-center justify-between mb-3 pb-2 border-b border-neutral-800/80">
-              <strong class="text-rose-400 text-sm font-bold uppercase tracking-wide">Instagram Business</strong>
+              <strong class="text-rose-400 text-sm font-bold uppercase tracking-wide">INSTAGRAM</strong>
               <span class="text-xs font-mono font-bold text-white">${capa.ig.seguidores || '—'} seguidores</span>
             </div>
             <div class="space-y-2 text-xs text-neutral-300 font-mono">
@@ -432,7 +432,7 @@ export function exportInteractiveWebReport(
 
           <div class="bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
             <div class="flex items-center justify-between mb-3 pb-2 border-b border-neutral-800/80">
-              <strong class="text-blue-400 text-sm font-bold uppercase tracking-wide">Facebook Page</strong>
+              <strong class="text-blue-400 text-sm font-bold uppercase tracking-wide">FACEBOOK</strong>
               <span class="text-xs font-mono font-bold text-white">${capa.fb.seguidores || '—'} seguidores</span>
             </div>
             <div class="space-y-2 text-xs text-neutral-300 font-mono">
