@@ -445,12 +445,16 @@ function getIdx(headers: string[], keywords: string[]): number {
 export function parseExcelWorkbook(wb: XLSX.WorkBook): CampaignRow[] {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-  if (!rows || !rows.length) throw new Error('O arquivo de planilha está vazio.');
+  return parseMatrixRows(rows);
+}
+
+export function parseMatrixRows(rows: any[][]): CampaignRow[] {
+  if (!rows || !rows.length) throw new Error('A planilha selecionada está vazia.');
 
   let headerRowIdx = 0;
   for (let hi = 0; hi < Math.min(6, rows.length); hi++) {
-    const firstCell = String(rows[hi][0] || '').toLowerCase().trim();
-    const rowStr = rows[hi].join(' ').toLowerCase();
+    const firstCell = String(rows[hi]?.[0] || '').toLowerCase().trim();
+    const rowStr = (rows[hi] || []).join(' ').toLowerCase();
     if (firstCell.includes('campanha') || firstCell.includes('campaign') || rowStr.includes('nome da campanha') || rowStr.includes('valor usado')) {
       headerRowIdx = hi;
       break;

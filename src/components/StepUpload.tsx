@@ -13,6 +13,7 @@ import {
 
 interface StepUploadProps {
   onFileUpload: (file: File) => void;
+  onOpenGoogleSheetsImport: () => void;
   onLoadDemo: () => void;
   errorMessage: string | null;
   onClearError: () => void;
@@ -20,6 +21,7 @@ interface StepUploadProps {
 
 export const StepUpload: React.FC<StepUploadProps> = ({
   onFileUpload,
+  onOpenGoogleSheetsImport,
   onLoadDemo,
   errorMessage,
   onClearError,
@@ -83,7 +85,7 @@ export const StepUpload: React.FC<StepUploadProps> = ({
           Transforme exportações do Meta Ads em relatórios executivos de alto padrão.
         </h1>
         <p className="text-base text-neutral-400 leading-relaxed">
-          Importe a planilha exportada do Gerenciador de Anúncios de qualquer cliente. O sistema identifica
+          Importe a planilha exportada do Gerenciador de Anúncios de qualquer cliente (arquivo Excel ou direto do Google Sheets). O sistema identifica
           automaticamente cliente, período, campanhas, objetivos e métricas — agora com{' '}
           <strong className="text-amber-300 font-semibold">Gemini AI</strong> para classificar campanhas complexas,
           gerar insights de tráfego e redigir o resumo executivo.
@@ -135,19 +137,31 @@ export const StepUpload: React.FC<StepUploadProps> = ({
               Selecione ou arraste a planilha .xlsx do Meta Ads
             </h3>
             <p className="text-sm text-neutral-400 max-w-md mx-auto mb-6">
-              Exporte o relatório no Gerenciador de Anúncios da Meta em formato Excel e solte aqui para leitura imediata.
+              Exporte o relatório no Gerenciador de Anúncios da Meta em formato Excel ou conecte diretamente ao seu Google Sheets.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   fileInputRef.current?.click();
                 }}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 font-bold text-sm transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 font-bold text-sm transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
               >
-                Selecionar Arquivo do Computador
+                Selecionar Arquivo (.xlsx)
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenGoogleSheetsImport();
+                }}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>Importar do Google Sheets</span>
               </button>
 
               <button
@@ -164,8 +178,9 @@ export const StepUpload: React.FC<StepUploadProps> = ({
             </div>
 
             <p className="text-xs text-neutral-500 mt-5">
-              Formatos aceitos: <strong className="text-neutral-400">.xlsx</strong> e{' '}
-              <strong className="text-neutral-400">.xls</strong> (suporte a exportações completas ou simplificadas)
+              Formatos aceitos: <strong className="text-neutral-400">.xlsx</strong>,{' '}
+              <strong className="text-neutral-400">.xls</strong> e{' '}
+              <strong className="text-emerald-400">Google Sheets</strong>
             </p>
           </div>
 

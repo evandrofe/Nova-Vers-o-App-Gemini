@@ -28,6 +28,7 @@ interface ReporteiPresentationViewProps {
   capa: CapaData;
   onExportExcel: () => void;
   isExportingExcel: boolean;
+  onExportGoogleSheets?: () => void;
   isPresentationMode?: boolean;
   isClientLocked?: boolean;
   onTogglePresentationMode?: () => void;
@@ -55,6 +56,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
   capa,
   onExportExcel,
   isExportingExcel,
+  onExportGoogleSheets,
   isPresentationMode = false,
   isClientLocked = false,
   onTogglePresentationMode,
@@ -362,6 +364,19 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
               <FileSpreadsheet className="w-4 h-4" />
               <span>{isExportingExcel ? 'Gerando...' : 'Planilha'}</span>
             </button>
+
+            {/* Google Sheets Export */}
+            {!isClientLocked && onExportGoogleSheets && (
+              <button
+                type="button"
+                onClick={onExportGoogleSheets}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                title="Enviar relatório formatado diretamente para o Google Sheets"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>Google Sheets</span>
+              </button>
+            )}
 
             {/* Toggle Full Presentation Mode */}
             {onTogglePresentationMode && (

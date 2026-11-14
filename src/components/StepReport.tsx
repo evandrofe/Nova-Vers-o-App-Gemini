@@ -27,6 +27,7 @@ interface StepReportProps {
   initialTab?: 'reportei' | 'table';
   onExportExcel: () => void;
   isExportingExcel: boolean;
+  onExportGoogleSheets?: () => void;
   onBackToCapa: () => void;
   onUpdateFiltro?: (campaignId: string, newFiltro: string) => void;
   onUpdateCidade?: (campaignId: string, newCidade: string) => void;
@@ -48,6 +49,7 @@ export const StepReport: React.FC<StepReportProps> = ({
   initialTab = 'reportei',
   onExportExcel,
   isExportingExcel,
+  onExportGoogleSheets,
   onUpdateFiltro,
   onUpdateCidade,
   onBatchUpdateFiltroCidade,
@@ -182,6 +184,19 @@ export const StepReport: React.FC<StepReportProps> = ({
                 <span>{isExportingExcel ? 'Gerando Planilha...' : 'Baixar Excel (.xlsx)'}</span>
               </button>
 
+              {/* Google Sheets Export Button */}
+              {onExportGoogleSheets && (
+                <button
+                  type="button"
+                  onClick={onExportGoogleSheets}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                  title="Enviar este relatório diretamente para o Google Sheets"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Exportar Google Sheets</span>
+                </button>
+              )}
+
               {/* Client Presentation Mode Toggle */}
               {onTogglePresentationMode && (
                 <button
@@ -246,6 +261,7 @@ export const StepReport: React.FC<StepReportProps> = ({
             capa={capa}
             onExportExcel={onExportExcel}
             isExportingExcel={isExportingExcel}
+            onExportGoogleSheets={isClientLocked ? undefined : onExportGoogleSheets}
             isPresentationMode={isPresentationMode}
             isClientLocked={isClientLocked}
             onTogglePresentationMode={isClientLocked ? undefined : onTogglePresentationMode}

@@ -22,6 +22,7 @@ import {
 } from './lib/metaAdsParser';
 import { exportToExcel } from './lib/excelExport';
 import { SimpleFunctionalPdfReport } from './components/SimpleFunctionalPdfReport';
+import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 
 const STORAGE_KEY = 'relatorio_ads_gemini_state_v1';
 const CONFIG_STORAGE_KEY = 'relatorio_ads_gemini_config_v1';
@@ -74,6 +75,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isAiClassifying, setIsAiClassifying] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [googleSheetsModalMode, setGoogleSheetsModalMode] = useState<'import' | 'export' | null>(null);
 
   const [sharedToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -253,6 +255,16 @@ export default function App() {
     };
 
     reader.readAsArrayBuffer(file);
+  };
+
+  // Handle importing parsed campaigns & meta from Google Sheets
+  const handleGoogleSheetsImport = (importedMeta: ReportMeta, parsedRows: CampaignRow[]) => {
+    setErrorMessage(null);
+    setMeta(importedMeta);
+    setCampaigns(parsedRows);
+    setBatchFiltro('');
+    setBatchCidade('');
+    setCurrentStep(2);
   };
 
   // Load complete pre-configured demonstration
@@ -533,6 +545,7 @@ export default function App() {
             {(!isClientLocked && !isPresentationMode && currentStep === 1) && (
               <StepUpload
                 onFileUpload={handleFileUpload}
+                onOpenGoogleSheetsImport={() => setGoogleSheetsModalMode('import')}
                 onLoadDemo={handleLoadDemo}
                 errorMessage={errorMessage}
                 onClearError={() => setErrorMessage(null)}
@@ -584,6 +597,7 @@ export default function App() {
                 initialTab={initialReportTab}
                 onExportExcel={handleExportExcel}
                 isExportingExcel={isExportingExcel}
+                onExportGoogleSheets={isClientLocked ? undefined : () => setGoogleSheetsModalMode('export')}
                 onBackToCapa={() => setCurrentStep(3)}
                 onUpdateFiltro={isPresentationMode || isClientLocked ? undefined : handleUpdateFiltro}
                 onUpdateCidade={isPresentationMode || isClientLocked ? undefined : handleUpdateCidade}
@@ -616,6 +630,16 @@ export default function App() {
           </>
         )}
       </main>
+
+      <GoogleSheetsModal
+        isOpen={googleSheetsModalMode !== null}
+        mode={googleSheetsModalMode || 'import'}
+        onClose={() => setGoogleSheetsModalMode(null)}
+        onImportSuccess={handleGoogleSheetsImport}
+        meta={meta}
+        campaigns={campaigns}
+        capa={capa}
+      />
 
       <footer className="border-t border-[#1e2025] py-6 px-4 text-center text-xs text-neutral-500 bg-[#090a0c] no-print">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
