@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { CapaData, ReportMeta } from '../types';
 import { SocialAudienceSection } from './SocialAudienceSection';
+import { EditablePercent } from './EditableField';
 
 interface StepCapaProps {
   meta: ReportMeta;
@@ -183,12 +184,11 @@ export const StepCapa: React.FC<StepCapaProps> = ({
                 <label className="block text-neutral-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
                   % Homens
                 </label>
-                <input
-                  type="text"
+                <EditablePercent
+                  variant="box"
                   placeholder="Ex: 34%"
                   value={capa.fb.homens}
-                  onChange={(e) => handleFieldChange('fb', 'homens', e.target.value)}
-                  className="w-full bg-[#1a1b20] border border-[#2e3037] rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-amber-400"
+                  onChange={(v) => handleFieldChange('fb', 'homens', v)}
                 />
               </div>
 
@@ -196,12 +196,11 @@ export const StepCapa: React.FC<StepCapaProps> = ({
                 <label className="block text-neutral-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
                   % Mulheres
                 </label>
-                <input
-                  type="text"
+                <EditablePercent
+                  variant="box"
                   placeholder="Ex: 66%"
                   value={capa.fb.mulheres}
-                  onChange={(e) => handleFieldChange('fb', 'mulheres', e.target.value)}
-                  className="w-full bg-[#1a1b20] border border-[#2e3037] rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-amber-400"
+                  onChange={(v) => handleFieldChange('fb', 'mulheres', v)}
                 />
               </div>
             </div>
@@ -300,12 +299,11 @@ export const StepCapa: React.FC<StepCapaProps> = ({
                 <label className="block text-neutral-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
                   % Homens
                 </label>
-                <input
-                  type="text"
+                <EditablePercent
+                  variant="box"
                   placeholder="Ex: 28%"
                   value={capa.ig.homens}
-                  onChange={(e) => handleFieldChange('ig', 'homens', e.target.value)}
-                  className="w-full bg-[#1a1b20] border border-[#2e3037] rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-amber-400"
+                  onChange={(v) => handleFieldChange('ig', 'homens', v)}
                 />
               </div>
 
@@ -313,12 +311,11 @@ export const StepCapa: React.FC<StepCapaProps> = ({
                 <label className="block text-neutral-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
                   % Mulheres
                 </label>
-                <input
-                  type="text"
+                <EditablePercent
+                  variant="box"
                   placeholder="Ex: 72%"
                   value={capa.ig.mulheres}
-                  onChange={(e) => handleFieldChange('ig', 'mulheres', e.target.value)}
-                  className="w-full bg-[#1a1b20] border border-[#2e3037] rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-amber-400"
+                  onChange={(v) => handleFieldChange('ig', 'mulheres', v)}
                 />
               </div>
             </div>

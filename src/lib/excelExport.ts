@@ -423,10 +423,10 @@ export async function exportToExcel(
       },
       {
         igLabel: 'Divisão de Gênero:',
-        igVal: `${capa.ig.mulheres || '—'} Mulheres / ${capa.ig.homens || '—'} Homens`,
+        igVal: `${capa.ig.mulheres ? (capa.ig.mulheres.trim().endsWith('%') ? capa.ig.mulheres.trim() : `${capa.ig.mulheres.trim()}%`) : '—'} Mulheres / ${capa.ig.homens ? (capa.ig.homens.trim().endsWith('%') ? capa.ig.homens.trim() : `${capa.ig.homens.trim()}%`) : '—'} Homens`,
         igColor: C.roseLight,
         fbLabel: 'Divisão de Gênero:',
-        fbVal: `${capa.fb.mulheres || '—'} Mulheres / ${capa.fb.homens || '—'} Homens`,
+        fbVal: `${capa.fb.mulheres ? (capa.fb.mulheres.trim().endsWith('%') ? capa.fb.mulheres.trim() : `${capa.fb.mulheres.trim()}%`) : '—'} Mulheres / ${capa.fb.homens ? (capa.fb.homens.trim().endsWith('%') ? capa.fb.homens.trim() : `${capa.fb.homens.trim()}%`) : '—'} Homens`,
         fbColor: C.blueLight,
       },
     ];

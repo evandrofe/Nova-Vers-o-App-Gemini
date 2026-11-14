@@ -425,7 +425,7 @@ export function exportInteractiveWebReport(
               </div>
               <div class="flex justify-between gap-2">
                 <span class="text-neutral-500 font-sans">Divisão de Gênero:</span>
-                <span class="text-rose-300">${capa.ig.mulheres || '—'} Mulheres / ${capa.ig.homens || '—'} Homens</span>
+                <span class="text-rose-300">${escapeHtml(capa.ig.mulheres ? (capa.ig.mulheres.trim().endsWith('%') ? capa.ig.mulheres.trim() : `${capa.ig.mulheres.trim()}%`) : '—')} Mulheres / ${escapeHtml(capa.ig.homens ? (capa.ig.homens.trim().endsWith('%') ? capa.ig.homens.trim() : `${capa.ig.homens.trim()}%`) : '—')} Homens</span>
               </div>
             </div>
           </div>
@@ -454,7 +454,7 @@ export function exportInteractiveWebReport(
               </div>
               <div class="flex justify-between gap-2">
                 <span class="text-neutral-500 font-sans">Divisão de Gênero:</span>
-                <span class="text-blue-300">${capa.fb.mulheres || '—'} Mulheres / ${capa.fb.homens || '—'} Homens</span>
+                <span class="text-blue-300">${escapeHtml(capa.fb.mulheres ? (capa.fb.mulheres.trim().endsWith('%') ? capa.fb.mulheres.trim() : `${capa.fb.mulheres.trim()}%`) : '—')} Mulheres / ${escapeHtml(capa.fb.homens ? (capa.fb.homens.trim().endsWith('%') ? capa.fb.homens.trim() : `${capa.fb.homens.trim()}%`) : '—')} Homens</span>
               </div>
             </div>
           </div>

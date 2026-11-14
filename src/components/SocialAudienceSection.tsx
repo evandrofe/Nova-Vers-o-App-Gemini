@@ -1,6 +1,6 @@
 import React from 'react';
 import { CapaData } from '../types';
-import { EditableText } from './EditableField';
+import { EditablePercent, EditableText } from './EditableField';
 
 interface SocialAudienceSectionProps {
   capa: CapaData;
@@ -109,20 +109,20 @@ export const SocialAudienceSection: React.FC<SocialAudienceSectionProps> = ({
             <div className="flex justify-between items-center gap-2">
               <span className="text-neutral-500 font-sans">Divisão de Gênero:</span>
               <div className="text-rose-300 flex items-center gap-1 flex-wrap justify-end">
-                <EditableText
+                <EditablePercent
                   value={capa.ig.mulheres}
                   onChange={(v) => onUpdateCapaField?.('ig', 'mulheres', v)}
                   isReadOnly={!canEdit}
                   placeholder="0%"
-                  className="text-right text-rose-300 w-14"
+                  className="text-right text-rose-300 w-16"
                 />
                 <span>Mulheres /</span>
-                <EditableText
+                <EditablePercent
                   value={capa.ig.homens}
                   onChange={(v) => onUpdateCapaField?.('ig', 'homens', v)}
                   isReadOnly={!canEdit}
                   placeholder="0%"
-                  className="text-right text-rose-300 w-14"
+                  className="text-right text-rose-300 w-16"
                 />
                 <span>Homens</span>
               </div>
@@ -191,20 +191,20 @@ export const SocialAudienceSection: React.FC<SocialAudienceSectionProps> = ({
             <div className="flex justify-between items-center gap-2">
               <span className="text-neutral-500 font-sans">Divisão de Gênero:</span>
               <div className="text-blue-300 flex items-center gap-1 flex-wrap justify-end">
-                <EditableText
+                <EditablePercent
                   value={capa.fb.mulheres}
                   onChange={(v) => onUpdateCapaField?.('fb', 'mulheres', v)}
                   isReadOnly={!canEdit}
                   placeholder="0%"
-                  className="text-right text-blue-300 w-14"
+                  className="text-right text-blue-300 w-16"
                 />
                 <span>Mulheres /</span>
-                <EditableText
+                <EditablePercent
                   value={capa.fb.homens}
                   onChange={(v) => onUpdateCapaField?.('fb', 'homens', v)}
                   isReadOnly={!canEdit}
                   placeholder="0%"
-                  className="text-right text-blue-300 w-14"
+                  className="text-right text-blue-300 w-16"
                 />
                 <span>Homens</span>
               </div>
