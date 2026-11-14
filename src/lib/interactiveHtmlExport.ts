@@ -5,6 +5,7 @@ import {
   getCampaignRowDisplayMetrics
 } from './columnsGuide';
 import { extractDateFromName } from './metaAdsParser';
+import { BRAND_LOGO_DATA_URI } from './brandLogo';
 
 function escapeHtml(val: unknown): string {
   return String(val ?? '')
@@ -168,9 +169,11 @@ export function exportInteractiveWebReport(
   <header class="border-b border-[#22242a] bg-[#121316]/90 sticky top-0 z-50 backdrop-blur-md px-6 py-4">
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center font-black text-black text-lg shadow-lg shadow-amber-500/20">
-          ${escapeHtml((meta.cliente || 'C').charAt(0).toUpperCase())}
-        </div>
+        <img
+          src="${BRAND_LOGO_DATA_URI}"
+          alt="Logo"
+          class="w-12 h-12 rounded-full object-contain shrink-0 shadow-lg shadow-amber-500/20"
+        />
         <div>
           <h1 class="text-lg font-extrabold text-white leading-tight">
             ${escapeHtml(meta.cliente || 'Relatório de Impulsionamento')}
@@ -988,11 +991,11 @@ export function exportCostSheetWebReport(
     <div class="bg-[#141518] border border-[#2b2d33] rounded-3xl p-6 sm:p-8 shadow-2xl relative">
       <div class="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div class="flex items-start sm:items-center gap-4">
-          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-0.5 shadow-xl shadow-amber-500/20 shrink-0">
-            <div class="w-full h-full bg-[#121316] rounded-[14px] flex items-center justify-center font-black text-amber-400 text-2xl tracking-tighter">
-              ${escapeHtml((meta.cliente || 'C').charAt(0).toUpperCase())}
-            </div>
-          </div>
+          <img
+            src="${BRAND_LOGO_DATA_URI}"
+            alt="Logo"
+            class="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-contain shrink-0 shadow-xl shadow-amber-500/20"
+          />
           <div>
             <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-400">
               <span>Planilha de Custos</span>

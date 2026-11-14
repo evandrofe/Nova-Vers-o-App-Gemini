@@ -20,6 +20,7 @@ import {
   getActiveCostColumns,
   getCampaignRowDisplayMetrics
 } from '../lib/columnsGuide';
+import { BRAND_LOGO_DATA_URI } from '../lib/brandLogo';
 
 interface SimpleFunctionalPdfReportProps {
   meta: ReportMeta;
@@ -289,11 +290,11 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
       <div className="bg-[#141518] border border-[#2b2d33] rounded-3xl p-6 shadow-xl print-avoid-break">
         <div className="flex items-center justify-between gap-4 pb-5 border-b border-neutral-800/80">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-0.5 shrink-0">
-              <div className="w-full h-full bg-[#121316] rounded-[14px] flex items-center justify-center font-black text-amber-400 text-2xl tracking-tighter">
-                {(meta.cliente || 'C').charAt(0).toUpperCase()}
-              </div>
-            </div>
+            <img
+              src={BRAND_LOGO_DATA_URI}
+              alt="Logo"
+              className="w-14 h-14 rounded-full object-contain shrink-0"
+            />
 
             <div>
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-400">

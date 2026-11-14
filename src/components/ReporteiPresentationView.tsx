@@ -23,6 +23,7 @@ import { BudgetDonutChart } from './BudgetDonutChart';
 import { exportInteractiveWebReport } from '../lib/interactiveHtmlExport';
 import { SocialAudienceSection } from './SocialAudienceSection';
 import { EditableNumber, EditableText } from './EditableField';
+import { BRAND_LOGO_DATA_URI } from '../lib/brandLogo';
 
 interface ReporteiPresentationViewProps {
   meta: ReportMeta;
@@ -289,11 +290,11 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
 
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-neutral-800/80">
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-0.5 shadow-xl shadow-amber-500/20 shrink-0">
-              <div className="w-full h-full bg-[#121316] rounded-[14px] flex items-center justify-center font-black text-amber-400 text-2xl tracking-tighter">
-                {(meta.cliente || 'C').charAt(0).toUpperCase()}
-              </div>
-            </div>
+            <img
+              src={BRAND_LOGO_DATA_URI}
+              alt="Logo"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-contain shrink-0 shadow-xl shadow-amber-500/20"
+            />
 
             <div>
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-400">
