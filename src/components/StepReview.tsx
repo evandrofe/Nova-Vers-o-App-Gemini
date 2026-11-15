@@ -472,6 +472,13 @@ export const StepReview: React.FC<StepReviewProps> = ({
                             </div>
                           );
                         }
+                        if (c.objective === 'Alc') {
+                          return (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/25 text-blue-300 text-[11px] font-semibold">
+                              Alcance
+                            </span>
+                          );
+                        }
                         return <span className="text-neutral-500">—</span>;
                       })()}
                     </td>

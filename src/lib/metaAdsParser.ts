@@ -54,6 +54,8 @@ export const DEFAULT_CLASSIFIER_CONFIG: ClassifierConfig = {
     tabloide: ['tabloides', 'tablóide', 'tablóides', 'tabloid', 'tabloids'],
     virtual: ['virtuais'],
     carrossel: ['carrosel', 'carrosseis', 'carrosséis'],
+    post: ['posts', 'postagem'],
+    dark: ['darkpost', 'postdark', 'darkpanfleto', 'panfletodark', 'darkcarrossel', 'carrosseldark', 'darktabloide', 'tabloidedark'],
     reels: ['reel', 'reels'],
     video: ['vídeo', 'videos', 'vídeos', 'vid'],
     whatsapp: ['whats', 'wpp', 'zap', 'zapp', 'wats'],
@@ -67,7 +69,8 @@ export const DEFAULT_CLASSIFIER_CONFIG: ClassifierConfig = {
     { keyword: 'reels', label: 'Reels' },
     { keyword: 'panfleto', label: 'Panfleto', aliases: ['virtual', 'tabloide'] },
     { keyword: 'carrossel', label: 'Carrossel' },
-    { keyword: 'post', label: 'Post' },
+    { keyword: 'post', label: 'Post', aliases: ['posts'] },
+    { keyword: 'dark', label: 'Dark Post' },
     { keyword: 'video', label: 'Vídeo', aliases: ['vídeo'] }
   ],
   objectivePriority: {
@@ -181,6 +184,26 @@ export class CampaignClassifierEngine {
     const sources = [campName, adName].filter(Boolean) as string[];
     for (const source of sources) {
       const tokens = this.tokenize(source);
+      const norm = this.normalizeText(source).toLowerCase();
+
+      // Reels sempre tem precedência sobre outros termos
+      if (tokens.some((t) => t === 'reels' || t === 'reel')) {
+        return 'Reels';
+      }
+
+      // Reconhecimento dedicado de mídias ligadas com Dark
+      const hasDark =
+        /\bdark\b|dark(?:post|panfleto|carrossel|carrosel|tabloide|tabloides|tabloid)|(?:post|panfleto|carrossel|carrosel|tabloide|tabloides|tabloid)dark/.test(
+          norm
+        );
+      if (hasDark) {
+        if (/tabloid/.test(norm)) return 'Dark Tabloide';
+        if (/carross?el/.test(norm)) return 'Dark Carrossel';
+        if (/panfleto|virtual/.test(norm)) return 'Dark Panfleto';
+        if (/\bposts?\b|darkpost|postdark/.test(norm)) return 'Dark Post';
+        return 'Dark Post';
+      }
+
       for (const kw of this.config.formatKeywords) {
         const variants = [kw.keyword, ...(kw.aliases || [])];
         for (const token of tokens) {
@@ -218,6 +241,40 @@ export class CampaignClassifierEngine {
 }
 
 export const defaultClassifier = new CampaignClassifierEngine();
+
+function normalizePlainForRule(value: string): string {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isAlcanceMainMetricValue(value?: string): boolean {
+  const norm = normalizePlainForRule(value || '');
+  if (!norm) return false;
+  return /\b(alcance|alcances|alc|reach)\b/i.test(norm);
+}
+
+export function isAlcanceEligibleMedia(format?: string, campName?: string, adName?: string): boolean {
+  const fmtNorm = normalizePlainForRule(format || '');
+  const textNorm = normalizePlainForRule(`${campName || ''} ${adName || ''}`);
+
+  // Reels mantém objetivo próprio (ReelsAlc / ReelsEng / etc.)
+  if (/\breels?\b/i.test(fmtNorm)) return false;
+  if ((!fmtNorm || fmtNorm === '-') && /\breels?\b/i.test(textNorm)) return false;
+
+  const mediaPattern =
+    /\b(post|posts|postagem|panfleto|panfletos|virtual|carrossel|carrosel|carrosseis|tabloide|tabloides|tabloid|tabloids|dark|darkpost|postdark|darkpanfleto|panfletodark|darkcarrossel|carrosseldark|darktabloide|tabloidedark)\b/i;
+
+  if (fmtNorm && fmtNorm !== '-') {
+    if (mediaPattern.test(fmtNorm)) return true;
+  }
+
+  return mediaPattern.test(textNorm);
+}
 
 // Date helpers
 export function extractDateFromName(name: string): Date | null {
@@ -442,14 +499,15 @@ function getIdx(headers: string[], keywords: string[]): number {
   return headers.findIndex((header) => keywords.some((keyword) => header.includes(keyword)));
 }
 
-export function parseExcelWorkbook(wb: XLSX.WorkBook): CampaignRow[] {
+export function parseExcelWorkbook(wb: XLSX.WorkBook, customConfig?: ClassifierConfig): CampaignRow[] {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-  return parseMatrixRows(rows);
+  return parseMatrixRows(rows, customConfig);
 }
 
-export function parseMatrixRows(rows: any[][]): CampaignRow[] {
+export function parseMatrixRows(rows: any[][], customConfig?: ClassifierConfig): CampaignRow[] {
   if (!rows || !rows.length) throw new Error('A planilha selecionada está vazia.');
+  const classifier = customConfig ? new CampaignClassifierEngine(customConfig) : defaultClassifier;
 
   let headerRowIdx = 0;
   for (let hi = 0; hi < Math.min(6, rows.length); hi++) {
@@ -489,7 +547,8 @@ export function parseMatrixRows(rows: any[][]): CampaignRow[] {
   const iConv = getIdx(headers, ['conversas por mensagem iniciadas', 'messaging conversations started', 'conversas iniciadas']);
   const iRes = getIdx(headers, ['resultados', 'results', 'result']);
   const iCPR = getIdx(headers, ['custo por resultado', 'cost per result']);
-  const iTRes = getIdx(headers, ['tipo de resultado']);
+  const iMainMetric = getIdx(headers, ['metrica principal', 'main metric', 'resultado principal']);
+  const iTRes = getIdx(headers, ['tipo de resultado', 'result type', 'indicador de resultados', 'result indicator']);
   const iFiltro = getIdx(headers, ['filtro', 'filter']);
   const iCidade = getIdx(headers, ['cidade', 'city', 'municipio', 'localizacao', 'location']);
 
@@ -522,8 +581,8 @@ export function parseMatrixRows(rows: any[][]): CampaignRow[] {
     const name = String(nameRaw).trim();
     const adName = String(g(row, iAN) || g(row, iCA) || '').trim();
 
-    const format = defaultClassifier.detectFormat(name, adName);
-    let objective = defaultClassifier.detectObjective(name, format);
+    const format = classifier.detectFormat(name, adName);
+    let objective = classifier.detectObjective(name, format);
 
     const dateFromName = extractDateFromName(name);
     const dStart = parseMetaDate(g(row, iDI));
@@ -541,7 +600,10 @@ export function parseMatrixRows(rows: any[][]): CampaignRow[] {
     const resultados = Math.round(safeNum(row, iRes));
     const custoRes = safeNum(row, iCPR);
 
-    const tipoRes = String(g(row, iTRes) || '').toLowerCase();
+    const mainMetricCell = g(row, iMainMetric);
+    const tipoResRaw = g(row, iTRes);
+    const mainMetricVal = mainMetricCell || tipoResRaw || '';
+    const tipoRes = normalizePlainForRule(mainMetricVal);
     const isClique = tipoRes.includes('clique') || tipoRes.includes('link');
     const isThruplay = tipoRes.includes('thruplay') || tipoRes.includes('visuali');
     const isConversa = tipoRes.includes('conversa') || tipoRes.includes('mensagem');
@@ -559,6 +621,18 @@ export function parseMatrixRows(rows: any[][]): CampaignRow[] {
     const isReels = /^Reels/i.test(format) || /reels|reel/i.test(name);
     if (isWhatsTerm && (conv > 0 || isConversa)) {
       objective = isReels ? 'ReelsEngWhats' : 'EngWhats';
+    }
+
+    // Regra mandatória solicitada pelo usuário:
+    // Quando a Métrica Principal for Alcance e a mídia for Post, Panfleto, Carrossel, Tabloide
+    // ou qualquer um desses ligado com Dark, puxar o objetivo da campanha para Alcance ('Alc').
+    const isAlcanceFilter =
+      isAlcanceMainMetricValue(mainMetricCell) ||
+      (!mainMetricCell && isAlcanceMainMetricValue(tipoResRaw)) ||
+      (!mainMetricVal && !eng && !links && !thru && !conv && reach > 0 && resultados === reach);
+
+    if (isAlcanceFilter && !isConversa && isAlcanceEligibleMedia(format, name, adName)) {
+      objective = 'Alc';
     }
 
     const isAlcanceCampaign = objective === 'Alc' || objective === 'ReelsAlc';
@@ -608,7 +682,8 @@ export function parseMatrixRows(rows: any[][]): CampaignRow[] {
       cInt,
       cConv,
       filtro: g(row, iFiltro) || '',
-      cidade: g(row, iCidade) || ''
+      cidade: g(row, iCidade) || '',
+      mainMetric: mainMetricVal || (objective === 'Alc' ? 'Alcance' : '')
     });
   }
 
@@ -634,6 +709,15 @@ export function applyCampaignPatch(
   patch: Partial<CampaignRow>
 ): CampaignRow {
   const next: CampaignRow = { ...prev, ...patch };
+
+  if (
+    'format' in patch &&
+    !('objective' in patch) &&
+    isAlcanceMainMetricValue(next.mainMetric) &&
+    isAlcanceEligibleMedia(next.format, next.name)
+  ) {
+    next.objective = 'Alc';
+  }
 
   const numKeys: Array<keyof CampaignRow> = [
     'budget', 'spent', 'reach', 'impr', 'eng', 'links', 'views', 'conv',

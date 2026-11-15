@@ -36,6 +36,7 @@ export interface CampaignRow {
   cConv: number;
   filtro?: string;
   cidade?: string;
+  mainMetric?: string;
   aiNotes?: string;
   confidence?: 'high' | 'medium' | 'low';
 }

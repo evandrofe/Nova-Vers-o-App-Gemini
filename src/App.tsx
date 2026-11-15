@@ -17,6 +17,8 @@ import {
   applyCampaignPatch,
   DEFAULT_CLASSIFIER_CONFIG,
   getSampleDemoData,
+  isAlcanceEligibleMedia,
+  isAlcanceMainMetricValue,
   parseExcelWorkbook,
   parseFileName,
   sortCampaignRows
@@ -230,7 +232,7 @@ export default function App() {
         if (!buffer) throw new Error('Não foi possível ler o arquivo.');
 
         const wb = XLSX.read(buffer, { type: 'array', cellDates: true, dateNF: 'dd/mm/yyyy' });
-        const data = parseExcelWorkbook(wb);
+        const data = parseExcelWorkbook(wb, config);
         if (!data || data.length === 0) {
           throw new Error('Nenhuma campanha identificada no arquivo.');
         }
@@ -406,10 +408,14 @@ export default function App() {
         const next = prev.map((camp) => {
           const match = classifications.find((c) => c.id === camp.id);
           if (match) {
+            const nextFormat = match.format || camp.format;
+            const forceAlcance =
+              isAlcanceMainMetricValue(camp.mainMetric) &&
+              isAlcanceEligibleMedia(nextFormat, camp.name);
             return {
               ...camp,
-              objective: match.objective,
-              format: match.format || camp.format,
+              objective: forceAlcance ? 'Alc' : match.objective,
+              format: nextFormat,
               displayName: match.displayName || camp.displayName,
               aiNotes: `IA: ${match.reason}`,
               confidence: match.confidence,

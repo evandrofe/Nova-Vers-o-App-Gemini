@@ -191,14 +191,15 @@ Taxonomia de Objetivos permitidos:
 - "ReelsTrafLink": Formato Reels com tráfego para Link
 - "ReelsTrafWhats": Formato Reels com tráfego para conversas no WhatsApp
 
-REGRA MANDATÓRIA:
-Sempre que o nome da campanha ou ação contiver "Whats", "WhatsApp", "Zap", "Wpp" ou termos relacionados E a campanha tiver conversas geradas (conv > 0), classifique OBRIGATORIAMENTE com o objetivo "EngWhats" (Engajamento Conversa de Whats) — ou "ReelsEngWhats" caso o formato seja Reels.
+REGRAS MANDATÓRIAS:
+1. Sempre que o nome da campanha ou ação contiver "Whats", "WhatsApp", "Zap", "Wpp" ou termos relacionados E a campanha tiver conversas geradas (conv > 0), classifique OBRIGATORIAMENTE com o objetivo "EngWhats" (Engajamento Conversa de Whats) — ou "ReelsEngWhats" caso o formato seja Reels.
+2. Sempre que a Métrica Principal (mainMetric) for "Alcance" (ou "Reach") e a mídia/formato for "Post", "Panfleto", "Carrossel", "Tabloide" ou qualquer um desses ligado com "Dark" (ex.: "Dark Post", "Post Dark", "Dark Panfleto", "Dark Carrossel", "Dark Tabloide"), classifique OBRIGATORIAMENTE com o objetivo "Alc" (Alcance).
 
 Taxonomia de Formatos comuns:
-"Reels", "Panfleto", "Carrossel", "Post", "Vídeo", "Story".
+"Reels", "Panfleto", "Carrossel", "Post", "Dark Post", "Dark Panfleto", "Dark Carrossel", "Dark Tabloide", "Vídeo", "Story".
 
 Campanhas a classificar:
-${JSON.stringify(campaigns.map((c: any) => ({ id: c.id, name: c.name, format: c.format, objective: c.objective, spent: c.spent, reach: c.reach, links: c.links, conv: c.conv })), null, 2)}
+${JSON.stringify(campaigns.map((c: any) => ({ id: c.id, name: c.name, format: c.format, objective: c.objective, mainMetric: c.mainMetric || '', spent: c.spent, reach: c.reach, links: c.links, conv: c.conv })), null, 2)}
 
 Retorne um JSON contendo a classificação para cada ID.`;
 
@@ -238,14 +239,35 @@ Retorne um JSON contendo a classificação para cada ID.`;
       console.warn('Fallback local para classificação devido a limite de cota:', aiErr.message);
       // Heuristic fallback if quota is exhausted
       const classifications = campaigns.map((c: any) => {
-        const isReels = /reels|reel/i.test(c.name);
-        const isWhats = /whats|whatsapp|zap|wpp|wats/i.test(c.name);
+        const normText = `${c.name || ''} ${c.format || ''}`
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        const normMainMetric = String(c.mainMetric || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        const isReels = /\breels?\b/.test(normText);
+        const isWhats = /whats|whatsapp|zap|wpp|wats/.test(normText);
         const hasConv = (Number(c.conv) || 0) > 0;
-        const isLink = /link|clique/i.test(c.name);
-        const isAlc = /alc|alcance/i.test(c.name);
+        const isLink = /link|clique/.test(normText);
+        const isAlc = /\balc\b|alcance/.test(normText);
+        const hasDark =
+          /\bdark\b|dark(?:post|panfleto|carrossel|carrosel|tabloide)|(?:post|panfleto|carrossel|carrosel|tabloide)dark/.test(
+            normText
+          );
+        const isAlcanceMetric = /\b(alcance|alcances|alc|reach)\b/.test(normMainMetric);
+        const isStaticOrDarkMedia =
+          !isReels &&
+          /\b(post|posts|postagem|panfleto|panfletos|virtual|carrossel|carrosel|carrosseis|tabloide|tabloides|tabloid|dark|darkpost|postdark|darkpanfleto|panfletodark|darkcarrossel|carrosseldark|darktabloide|tabloidedark)\b/.test(
+            normText
+          );
 
         let objective = 'Eng';
-        if (isWhats && (hasConv || !isLink)) {
+        if (isAlcanceMetric && isStaticOrDarkMedia) {
+          objective = 'Alc';
+        } else if (isWhats && (hasConv || !isLink)) {
           objective = isReels ? 'ReelsEngWhats' : 'EngWhats';
         } else if (isReels && isLink) {
           objective = 'ReelsEngLink';
@@ -259,10 +281,24 @@ Retorne um JSON contendo a classificação para cada ID.`;
           objective = 'Alc';
         }
 
+        let detectedFormat = 'Post';
+        if (isReels) {
+          detectedFormat = 'Reels';
+        } else if (hasDark) {
+          if (/tabloid/.test(normText)) detectedFormat = 'Dark Tabloide';
+          else if (/carross?el/.test(normText)) detectedFormat = 'Dark Carrossel';
+          else if (/panfleto|virtual/.test(normText)) detectedFormat = 'Dark Panfleto';
+          else detectedFormat = 'Dark Post';
+        } else if (/panfleto|tabloid|virtual/.test(normText)) {
+          detectedFormat = 'Panfleto';
+        } else if (/carross?el/.test(normText)) {
+          detectedFormat = 'Carrossel';
+        }
+
         return {
           id: c.id,
           objective,
-          format: isReels ? 'Reels' : /panfleto/i.test(c.name) ? 'Panfleto' : /carrossel/i.test(c.name) ? 'Carrossel' : 'Post',
+          format: detectedFormat,
           displayName: c.displayName || c.name.replace(/^\d{1,2}[\/\-\.]\d{1,2}\s*[-–]\s*/, ''),
           reason: 'Classificado via motor de correspondência semântica local (modo de alta velocidade).',
           confidence: 'high'
