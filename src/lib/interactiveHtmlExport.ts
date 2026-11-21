@@ -1,8 +1,10 @@
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import {
   ActiveCostColumnsResult,
+  filterActiveCampaigns,
   getActiveCostColumns,
-  getCampaignRowDisplayMetrics
+  getCampaignRowDisplayMetrics,
+  hasFilledText
 } from './columnsGuide';
 import { extractDateFromName } from './metaAdsParser';
 import { BRAND_LOGO_DATA_URI } from './brandLogo';
@@ -21,12 +23,13 @@ export function exportInteractiveWebReport(
   campaigns: CampaignRow[],
   capa: CapaData
 ) {
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalImpr = campaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
+  const activeCampaigns = filterActiveCampaigns(campaigns);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalImpr = activeCampaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
   const avgFrequency = totalReach > 0 ? (totalImpr / totalReach).toFixed(2) : '1.00';
   const avgCostPerConv = totalConv > 0 ? totalSpent / totalConv : 0;
   const avgCPM = totalReach > 0 ? (totalSpent / totalReach) * 1000 : 0;
@@ -51,7 +54,7 @@ export function exportInteractiveWebReport(
     engajamento: { name: 'Engajamento Feed', color: '#EC4899', value: 0, count: 0, reach: 0, conv: 0 },
   };
 
-  campaigns.forEach((c) => {
+  activeCampaigns.forEach((c) => {
     const obj = c.objective || '';
     const val = c.budget && c.budget > 0 ? c.budget : c.spent || 0;
     let k = 'alcance';
@@ -76,7 +79,7 @@ export function exportInteractiveWebReport(
     totalBudget,
     totalInt,
     colInfo,
-  } = buildCostSheetFragments(campaigns);
+  } = buildCostSheetFragments(activeCampaigns);
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -242,7 +245,7 @@ export function exportInteractiveWebReport(
         <div class="bg-neutral-900/70 border border-neutral-800 p-4 rounded-2xl">
           <span class="text-[11px] text-purple-400 uppercase font-bold block mb-1">Views ThruPlay (Reels)</span>
           <span class="text-xl sm:text-2xl font-black text-purple-300 font-mono">${fmtNum(totalViews)}</span>
-          <span class="text-[10px] text-neutral-500 block mt-1">${campaigns.filter((c) => c.views > 0).length} ações de vídeo</span>
+          <span class="text-[10px] text-neutral-500 block mt-1">${activeCampaigns.filter((c) => c.views > 0).length} ações de vídeo</span>
         </div>
 
         <div class="bg-neutral-900/70 border border-neutral-800 p-4 rounded-2xl">
@@ -265,7 +268,7 @@ export function exportInteractiveWebReport(
 
         <div class="bg-neutral-900/70 border border-neutral-800 p-4 rounded-2xl">
           <span class="text-[11px] text-neutral-400 uppercase font-bold block mb-1">Ações Ativas</span>
-          <span class="text-xl sm:text-2xl font-black text-white font-mono">${campaigns.length} ações</span>
+          <span class="text-xl sm:text-2xl font-black text-white font-mono">${activeCampaigns.length} ações</span>
           <span class="text-[10px] text-neutral-500 block mt-1">Veiculadas no período</span>
         </div>
       </div>
@@ -323,11 +326,11 @@ export function exportInteractiveWebReport(
           <span class="text-xs font-bold text-amber-400 uppercase tracking-widest">Performance Individual</span>
           <h3 class="text-xl font-black text-white mt-0.5">Anúncios e Campanhas em Destaque</h3>
         </div>
-        <span class="text-xs text-neutral-400 font-bold">${campaigns.length} Ações Analisadas</span>
+        <span class="text-xs text-neutral-400 font-bold">${activeCampaigns.length} Ações Analisadas</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        ${campaigns
+        ${activeCampaigns
           .map((c) => {
             let mainMetric = `${fmtNum(c.reach)} alcance`;
             let badge = 'Alcance';
@@ -352,12 +355,12 @@ export function exportInteractiveWebReport(
               <div class="flex items-start justify-between gap-3 mb-3">
                 <div class="min-w-0">
                   <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badgeColor}">
-                    ${badge} • ${c.format || 'Anúncio'}
+                    ${badge} • ${escapeHtml(c.format || 'Anúncio')}
                   </span>
                   <h4 class="text-sm font-extrabold text-white mt-1.5 truncate">
-                    ${c.displayName || c.name}
+                    ${escapeHtml(c.displayName ?? c.name)}
                   </h4>
-                  <p class="text-[11px] text-neutral-400">Validade: ${c.validity || 'Mês completo'}</p>
+                  <p class="text-[11px] text-neutral-400">Validade: ${escapeHtml(c.validity || 'Mês completo')}</p>
                 </div>
                 <div class="text-right shrink-0 font-mono">
                   <span class="text-xs font-black text-white block">${fmtBRL(c.spent)}</span>
@@ -472,7 +475,7 @@ export function exportInteractiveWebReport(
         : ''
     }
 
-    ${buildCostSheetTableAndGuideHtml(meta, campaigns, {
+    ${buildCostSheetTableAndGuideHtml(meta, activeCampaigns, {
       tableRowsHtml,
       guideCardsHtml,
       totalBudget,
@@ -556,6 +559,7 @@ const COST_SHEET_SCRIPT_HTML = `<script>
   </script>`;
 
 function buildCostSheetFragments(campaigns: CampaignRow[]) {
+  const activeCampaigns = filterActiveCampaigns(campaigns);
   const fmtBRL = (val: number | undefined): string => {
     if (val === undefined || val === null || isNaN(val)) return 'R$ 0,00';
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -566,22 +570,26 @@ function buildCostSheetFragments(campaigns: CampaignRow[]) {
     return val.toLocaleString('pt-BR');
   };
 
-  const colInfo = getActiveCostColumns(campaigns, true);
+  const colInfo = getActiveCostColumns(activeCampaigns, true);
   const { activeColumns, visibleSet, displayNumMap } = colInfo;
   const vis = (colNum: number) => visibleSet.has(colNum);
   const colBadgeNum = (colNum: number) => displayNumMap.get(colNum) ?? colNum;
+  const lastMetricColNum = activeColumns
+    .filter((c) => c.num < 18)
+    .reduce((max, c) => Math.max(max, c.num), 0);
+  const cellR = (colNum: number) => (colNum !== lastMetricColNum ? 'border-r ' : '');
 
-  const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalInt = campaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalBudget = activeCampaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalInt = activeCampaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
 
   let lastDateKey = '';
 
-  const tableRowsHtml = campaigns
+  const tableRowsHtml = activeCampaigns
     .map((r, idx) => {
       const curDate = extractDateFromName(r.name) || (r.sortDate ? new Date(r.sortDate) : null);
       const curDateKey = curDate ? String(curDate.getTime()) : 'none';
@@ -599,38 +607,46 @@ function buildCostSheetFragments(campaigns: CampaignRow[]) {
       const colCInt = m.cIntValue > 0 ? fmtBRL(m.cIntValue) : '—';
       const colCConv = m.cConvValue > 0 ? fmtBRL(m.cConvValue) : '—';
       const colConv = m.convValue > 0 ? fmtNum(m.convValue) : '—';
+      const rowHasObs = hasFilledText(r.observacao);
 
       const searchBlob = escapeHtml(
-        `${r.displayName || ''} ${r.name || ''} ${r.format || ''} ${r.objective || ''} ${r.filtro || ''} ${r.cidade || ''}`.toLowerCase()
+        `${r.displayName || ''} ${r.name || ''} ${r.format || ''} ${r.objective || ''} ${r.filtro || ''} ${r.cidade || ''} ${r.observacao || ''}`.toLowerCase()
       );
 
       const separatorHtml = showSeparator
-        ? `<tr class="bg-[#101114] border-y border-[#2b2d33] h-2" data-sep="1"><td colspan="${activeColumns.length}" class="h-2 p-0"></td></tr>`
+        ? `<tr class="h-2" data-sep="1"><td colspan="${vis(18) ? Math.max(1, activeColumns.length - 1) : activeColumns.length}" class="h-2 p-0 bg-[#101114] border-y border-[#2b2d33]"></td>${vis(18) ? '<td class="h-2 p-0 bg-[#141518] border-0"></td>' : ''}</tr>`
         : '';
 
       const cells: string[] = [];
       if (vis(1)) {
-        cells.push(`<td class="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white">
-          <span class="block">${escapeHtml(r.displayName || r.name)}</span>
+        cells.push(`<td class="py-2.5 px-3 border-b ${cellR(1)}border-[#23252b] text-left font-medium text-white">
+          <span class="block">${escapeHtml(r.displayName ?? r.name)}</span>
           ${r.aiNotes ? `<span class="block text-[9px] text-amber-400/80 font-normal mt-0.5">${escapeHtml(r.aiNotes)}</span>` : ''}
         </td>`);
       }
-      if (vis(2)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">${escapeHtml(r.format || '—')}</td>`);
-      if (vis(3)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-400">${escapeHtml(r.validity || '—')}</td>`);
-      if (vis(4)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${fmtBRL(r.budget)}</td>`);
-      if (vis(5)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">${fmtBRL(r.spent)}</td>`);
-      if (vis(6)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">${colReach}</td>`);
-      if (vis(7)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colEng}</td>`);
-      if (vis(8)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colLinks}</td>`);
-      if (vis(9)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">${colViews}</td>`);
-      if (vis(10)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">${colCPM}</td>`);
-      if (vis(11)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colCPC}</td>`);
-      if (vis(12)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">${colThru}</td>`);
-      if (vis(13)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colCInt}</td>`);
-      if (vis(14)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">${colCConv}</td>`);
-      if (vis(15)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-[10px] text-neutral-200">${escapeHtml(r.filtro || '—')}</td>`);
-      if (vis(16)) cells.push(`<td class="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-[10px] text-neutral-200">${escapeHtml(r.cidade || '—')}</td>`);
-      if (vis(17)) cells.push(`<td class="py-2.5 px-2 border-b border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">${colConv !== '—' ? `${colConv} conv.` : '—'}</td>`);
+      if (vis(2)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(2)}border-[#23252b] text-center whitespace-nowrap text-neutral-300">${escapeHtml(r.format || '—')}</td>`);
+      if (vis(3)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(3)}border-[#23252b] text-center whitespace-nowrap text-neutral-400">${escapeHtml(r.validity || '—')}</td>`);
+      if (vis(4)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(4)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${fmtBRL(r.budget)}</td>`);
+      if (vis(5)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(5)}border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">${fmtBRL(r.spent)}</td>`);
+      if (vis(6)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(6)}border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">${colReach}</td>`);
+      if (vis(7)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(7)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colEng}</td>`);
+      if (vis(8)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(8)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colLinks}</td>`);
+      if (vis(9)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(9)}border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">${colViews}</td>`);
+      if (vis(10)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(10)}border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">${colCPM}</td>`);
+      if (vis(11)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(11)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colCPC}</td>`);
+      if (vis(12)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(12)}border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">${colThru}</td>`);
+      if (vis(13)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(13)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">${colCInt}</td>`);
+      if (vis(14)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(14)}border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">${colCConv}</td>`);
+      if (vis(15)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(15)}border-[#23252b] text-center whitespace-nowrap text-[10px] text-neutral-200">${escapeHtml(r.filtro || '—')}</td>`);
+      if (vis(16)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(16)}border-[#23252b] text-center whitespace-nowrap text-[10px] text-neutral-200">${escapeHtml(r.cidade || '—')}</td>`);
+      if (vis(17)) cells.push(`<td class="py-2.5 px-2 border-b ${cellR(17)}border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">${colConv !== '—' ? `${colConv} conv.` : '—'}</td>`);
+      if (vis(18)) {
+        cells.push(
+          rowHasObs
+            ? `<td class="py-2.5 px-2.5 border border-[#2b2d33] bg-[#181a20] text-left text-[10px] text-neutral-200 min-w-[130px] max-w-[240px] whitespace-normal leading-snug">${escapeHtml(r.observacao)}</td>`
+            : `<td class="py-2.5 px-2 border-0 bg-[#141518]"></td>`
+        );
+      }
 
       return `${separatorHtml}
       <tr class="campaign-row hover:bg-[#1a1c24] transition-colors" data-search="${searchBlob}">
@@ -639,7 +655,8 @@ function buildCostSheetFragments(campaigns: CampaignRow[]) {
     })
     .join('');
 
-  const guideCardsHtml = activeColumns
+  const glossaryColumns = activeColumns.filter((c) => c.num !== 18);
+  const guideCardsHtml = glossaryColumns
     .map(
       (col) => `
     <div
@@ -753,53 +770,61 @@ function buildCostSheetTableAndGuideHtml(
   if (vis(14)) headerCells.push(`<th class="border-r border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/20 text-emerald-300"><button type="button" onclick="focusGuideCard(14)" class="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer"><span class="font-mono text-[9px] px-1 rounded bg-emerald-900/60 text-emerald-200">${colBadgeNum(14)}</span><span>Custo / Conversa</span></button></th>`);
   if (vis(15)) headerCells.push(`<th class="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80"><button type="button" onclick="focusGuideCard(15)" class="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer"><span class="font-mono text-[9px] px-1 rounded bg-neutral-800 text-neutral-400">${colBadgeNum(15)}</span><span>Filtro</span></button></th>`);
   if (vis(16)) headerCells.push(`<th class="border-r border-[#2b2d33] text-center whitespace-nowrap min-w-[70px] p-0 hover:bg-neutral-800/80"><button type="button" onclick="focusGuideCard(16)" class="w-full py-3 px-1.5 flex items-center justify-center gap-1 cursor-pointer"><span class="font-mono text-[9px] px-1 rounded bg-neutral-800 text-neutral-400">${colBadgeNum(16)}</span><span>Cidade</span></button></th>`);
-  if (vis(17)) headerCells.push(`<th class="border-b border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 text-emerald-300 font-extrabold"><button type="button" onclick="focusGuideCard(17)" class="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer"><span class="font-mono text-[9px] px-1 rounded bg-emerald-800 text-white">${colBadgeNum(17)}</span><span>Conversas</span></button></th>`);
+  if (vis(17)) headerCells.push(`<th class="border-b ${vis(18) ? 'border-r ' : ''}border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 text-emerald-300 font-extrabold"><button type="button" onclick="focusGuideCard(17)" class="w-full py-3 px-2 flex items-center justify-end gap-1 cursor-pointer"><span class="font-mono text-[9px] px-1 rounded bg-emerald-800 text-white">${colBadgeNum(17)}</span><span>Conversas</span></button></th>`);
+  if (vis(18)) headerCells.push(`<th class="border-b border-[#2b2d33] text-left whitespace-nowrap min-w-[140px] p-0"><div class="w-full py-3 px-2.5 flex items-center gap-1 text-left"><span>Observação</span></div></th>`);
+
+  const lastMetricColNum = activeColumns
+    .filter((c) => c.num < 18)
+    .reduce((max, c) => Math.max(max, c.num), 0);
+  const footR = (colNum: number) => (colNum !== lastMetricColNum ? 'border-r border-r-[#2b2d33] ' : '');
 
   const footerCells: string[] = [];
   if (leadingColSpan > 0) {
-    footerCells.push(`<td colspan="${leadingColSpan}" class="py-3 px-3 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">Total Consolidado (${campaigns.length} ações)</td>`);
+    footerCells.push(`<td colspan="${leadingColSpan}" class="py-3 px-3 border-t-2 border-t-amber-500 ${lastMetricColNum > 3 ? 'border-r border-r-[#2b2d33] ' : ''}text-left uppercase font-sans tracking-wide">Total Consolidado (${campaigns.length} ações)</td>`);
   }
-  if (vis(4)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-neutral-300">${fmtBRL(totalBudget)}</td>`);
-  if (vis(5)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right font-black text-amber-300 bg-amber-950/30">${fmtBRL(totalSpent)}</td>`);
-  if (vis(6)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right font-black text-blue-300 bg-blue-950/30">${fmtNum(totalReach)}</td>`);
-  if (vis(7)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-neutral-300">${fmtNum(totalInt)}</td>`);
-  if (vis(8)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-neutral-300">${fmtNum(totalLinks)}</td>`);
-  if (vis(9)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right font-black text-purple-300 bg-purple-950/30">${fmtNum(totalViews)}</td>`);
-  if (vis(10)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-blue-300">${totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}</td>`);
-  if (vis(11)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-neutral-300">${totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}</td>`);
-  if (vis(12)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-purple-300">${totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}</td>`);
-  if (vis(13)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-neutral-300">${totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}</td>`);
-  if (vis(14)) footerCells.push(`<td class="py-3 px-2 border-r border-[#2b2d33] text-right text-emerald-300">${totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}</td>`);
-  if (vis(15)) footerCells.push(`<td class="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>`);
-  if (vis(16)) footerCells.push(`<td class="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>`);
-  if (vis(17)) footerCells.push(`<td class="py-3 px-2 text-right font-black text-emerald-400 bg-emerald-950/40">${totalConv > 0 ? `${totalConv} conv.` : '—'}</td>`);
+  if (vis(4)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(4)}text-right text-neutral-300">${fmtBRL(totalBudget)}</td>`);
+  if (vis(5)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(5)}text-right font-black text-amber-300 bg-amber-950/30">${fmtBRL(totalSpent)}</td>`);
+  if (vis(6)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(6)}text-right font-black text-blue-300 bg-blue-950/30">${fmtNum(totalReach)}</td>`);
+  if (vis(7)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(7)}text-right text-neutral-300">${fmtNum(totalInt)}</td>`);
+  if (vis(8)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(8)}text-right text-neutral-300">${fmtNum(totalLinks)}</td>`);
+  if (vis(9)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(9)}text-right font-black text-purple-300 bg-purple-950/30">${fmtNum(totalViews)}</td>`);
+  if (vis(10)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(10)}text-right text-blue-300">${totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}</td>`);
+  if (vis(11)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(11)}text-right text-neutral-300">${totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}</td>`);
+  if (vis(12)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(12)}text-right text-purple-300">${totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}</td>`);
+  if (vis(13)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(13)}text-right text-neutral-300">${totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}</td>`);
+  if (vis(14)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(14)}text-right text-emerald-300">${totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}</td>`);
+  if (vis(15)) footerCells.push(`<td class="py-3 px-1.5 border-t-2 border-t-amber-500 ${footR(15)}text-center text-neutral-500 font-sans">—</td>`);
+  if (vis(16)) footerCells.push(`<td class="py-3 px-1.5 border-t-2 border-t-amber-500 ${footR(16)}text-center text-neutral-500 font-sans">—</td>`);
+  if (vis(17)) footerCells.push(`<td class="py-3 px-2 border-t-2 border-t-amber-500 ${footR(17)}text-right font-black text-emerald-400 bg-emerald-950/40">${totalConv > 0 ? `${totalConv} conv.` : '—'}</td>`);
+  if (vis(18)) footerCells.push(`<td class="py-3 px-2 border-0 bg-[#141518]"></td>`);
 
-  const setupCount = activeColumns.filter((c) => c.category === 'setup' || c.category === 'financeiro').length;
-  const topoCount = activeColumns.filter((c) => c.category === 'topo').length;
-  const meioCount = activeColumns.filter((c) => c.category === 'meio').length;
-  const fundoCount = activeColumns.filter((c) => c.category === 'fundo').length;
+  const glossaryColumns = activeColumns.filter((c) => c.num !== 18);
+  const setupCount = glossaryColumns.filter((c) => c.category === 'setup' || c.category === 'financeiro').length;
+  const topoCount = glossaryColumns.filter((c) => c.category === 'topo').length;
+  const meioCount = glossaryColumns.filter((c) => c.category === 'meio').length;
+  const fundoCount = glossaryColumns.filter((c) => c.category === 'fundo').length;
 
   const tabButtons: string[] = [
-    `<button type="button" onclick="filterGuide('all', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-500 text-neutral-950 shadow-md cursor-pointer">Todas (${activeColumns.length})</button>`,
+    `<button type="button" onclick="filterGuide('all', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-500 text-neutral-950 shadow-md cursor-pointer">Todas (${glossaryColumns.length})</button>`,
   ];
   if (setupCount > 0) {
     tabButtons.push(
-      `<button type="button" onclick="filterGuide('setup', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">${allVisible ? 'Setup &amp; Verba (1 a 5)' : `Setup &amp; Verba (${setupCount})`}</button>`
+      `<button type="button" onclick="filterGuide('setup', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">Setup &amp; Verba (${setupCount})</button>`
     );
   }
   if (topoCount > 0) {
     tabButtons.push(
-      `<button type="button" onclick="filterGuide('topo', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">${allVisible ? 'Alcance / CPM (6 e 10)' : `Alcance / CPM (${topoCount})`}</button>`
+      `<button type="button" onclick="filterGuide('topo', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">Alcance / CPM (${topoCount})</button>`
     );
   }
   if (meioCount > 0) {
     tabButtons.push(
-      `<button type="button" onclick="filterGuide('meio', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">${allVisible ? 'Engajamento / Vídeos (7 a 13)' : `Engajamento / Vídeos (${meioCount})`}</button>`
+      `<button type="button" onclick="filterGuide('meio', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">Engajamento / Vídeos (${meioCount})</button>`
     );
   }
   if (fundoCount > 0) {
     tabButtons.push(
-      `<button type="button" onclick="filterGuide('fundo', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">${allVisible ? 'WhatsApp &amp; Vendas (14 e 17)' : `WhatsApp &amp; Vendas (${fundoCount})`}</button>`
+      `<button type="button" onclick="filterGuide('fundo', this)" class="guide-tab px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer">WhatsApp &amp; Vendas (${fundoCount})</button>`
     );
   }
 
@@ -810,7 +835,7 @@ function buildCostSheetTableAndGuideHtml(
         <div class="space-y-1">
           <div class="flex items-center gap-2.5 flex-wrap">
             <span class="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30">
-              Planilha de Custos · ${allVisible ? '17 Colunas Oficiais Meta Ads' : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
+              Planilha de Custos · ${allVisible ? `${activeColumns.length} Colunas Oficiais Meta Ads` : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
             </span>
             <span class="text-[11px] text-neutral-400">
               Clique no título de qualquer coluna abaixo para ir direto à explicação dela
@@ -847,10 +872,10 @@ function buildCostSheetTableAndGuideHtml(
               ${headerCells.join('\n              ')}
             </tr>
           </thead>
-          <tbody class="divide-y divide-[#23252b]">
+          <tbody>
             ${tableRowsHtml}
           </tbody>
-          <tfoot class="sticky bottom-0 z-20 bg-[#16171d] border-t-2 border-amber-500 font-mono text-[10.5px]">
+          <tfoot class="sticky bottom-0 z-20 bg-[#16171d] font-mono text-[10.5px]">
             <tr class="text-white font-bold">
               ${footerCells.join('\n              ')}
             </tr>
@@ -864,7 +889,7 @@ function buildCostSheetTableAndGuideHtml(
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2b2d33] pb-4">
         <div class="space-y-1">
           <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Glossário Técnico &amp; Executivo</span>
-          <h3 class="text-xl font-bold text-white tracking-tight">O que cada uma das ${allVisible ? '17' : activeColumns.length} colunas significa e por que é importante?</h3>
+          <h3 class="text-xl font-bold text-white tracking-tight">O que cada uma das ${glossaryColumns.length} colunas significa e por que é importante?</h3>
           <p class="text-xs text-neutral-400 leading-relaxed max-w-3xl">
             Consulte abaixo a descrição didática de cada coluna da planilha, por que ela é indispensável para o cliente e como analisar seus números com precisão.
           </p>
@@ -886,11 +911,12 @@ export function exportCostSheetWebReport(
   meta: ReportMeta,
   campaigns: CampaignRow[]
 ) {
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const activeCampaigns = filterActiveCampaigns(campaigns);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
 
   const {
     tableRowsHtml,
@@ -898,7 +924,7 @@ export function exportCostSheetWebReport(
     totalBudget,
     totalInt,
     colInfo,
-  } = buildCostSheetFragments(campaigns);
+  } = buildCostSheetFragments(activeCampaigns);
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1006,7 +1032,7 @@ export function exportCostSheetWebReport(
               Relatório de ${escapeHtml(meta.cliente || 'Cliente')}
             </h1>
             <p class="text-xs sm:text-sm text-neutral-400 mt-0.5">
-              ${colInfo.allVisible ? 'Matriz Oficial de 17 Colunas e Métricas Detalhadas' : `Matriz Executiva de ${colInfo.activeColumns.length} Colunas Preenchidas e Métricas Detalhadas`} • Base de dados oficial da Meta (${campaigns.length} ações)
+              ${colInfo.allVisible ? `Matriz Oficial de ${colInfo.activeColumns.length} Colunas e Métricas Detalhadas` : `Matriz Executiva de ${colInfo.activeColumns.length} Colunas Preenchidas e Métricas Detalhadas`} • Base de dados oficial da Meta (${activeCampaigns.length} ações)
             </p>
           </div>
         </div>
@@ -1022,7 +1048,7 @@ export function exportCostSheetWebReport(
       </div>
     </div>
 
-    ${buildCostSheetTableAndGuideHtml(meta, campaigns, {
+    ${buildCostSheetTableAndGuideHtml(meta, activeCampaigns, {
       tableRowsHtml,
       guideCardsHtml,
       totalBudget,

@@ -242,6 +242,19 @@ export const COLUMNS_17_GUIDE: ColumnInfo[] = [
     importance: 'É o objetivo final de conversão: reflete contatos comerciais diretos, pedidos de delivery, cotações e novas vendas geradas para a empresa.',
     tip: 'Fundo de Funil puro: esse resultado é maximizado quando a loja também investe em Alcance e Reels para aquecer o público.',
     idealFor: 'Vendas diretas, atendimento e novos clientes'
+  },
+  {
+    num: 18,
+    name: 'Observação',
+    short: 'Observação',
+    category: 'setup',
+    stage: 'Anotações & Contexto',
+    stageColor: 'text-amber-300 bg-amber-950/50 border-amber-800/40',
+    badge: 'Notas da Ação',
+    meaning: 'Observações complementares inseridas manualmente sobre a campanha, criativo, ajustes ou particularidades da veiculação.',
+    importance: 'Registra contexto estratégico útil para a leitura do cliente, destacando resultados, pausas, trocas de criativo ou recomendações pontuais.',
+    tip: 'Esta coluna só aparece no relatório final do cliente quando pelo menos uma célula estiver preenchida.',
+    idealFor: 'Contextualização e transparência no relatório'
   }
 ];
 
@@ -263,6 +276,7 @@ const PDF_COLUMN_WEIGHTS: Record<number, number> = {
   15: 6.5,
   16: 6,
   17: 5.1,
+  18: 7.5,
 };
 
 export interface RowDisplayMetrics {
@@ -339,10 +353,67 @@ export function getCampaignRowDisplayMetrics(r: CampaignRow): RowDisplayMetrics 
   };
 }
 
-const hasFilledText = (val: string | undefined): boolean => {
+export const hasFilledText = (val: string | undefined): boolean => {
   const s = (val || '').trim();
   return Boolean(s && s !== '-' && s !== '—');
 };
+
+export const EMPTY_CAMPAIGN_CLEAR_PATCH: Partial<CampaignRow> = {
+  displayName: '',
+  format: '',
+  validity: '',
+  budget: 0,
+  spent: 0,
+  reach: 0,
+  impr: 0,
+  eng: 0,
+  links: 0,
+  views: 0,
+  conv: 0,
+  cpm: 0,
+  cpc: 0,
+  cThru: 0,
+  cInt: 0,
+  cConv: 0,
+  filtro: '',
+  cidade: '',
+  observacao: '',
+  aiNotes: '',
+};
+
+export function isCampaignRowEmpty(r: CampaignRow): boolean {
+  const displayTitle = r.displayName !== undefined ? r.displayName : r.name;
+  const hasText =
+    hasFilledText(displayTitle) ||
+    hasFilledText(r.format) ||
+    hasFilledText(r.validity) ||
+    hasFilledText(r.filtro) ||
+    hasFilledText(r.cidade) ||
+    hasFilledText(r.observacao);
+
+  if (hasText) return false;
+
+  const m = getCampaignRowDisplayMetrics(r);
+  const hasNumber =
+    (r.budget || 0) > 0 ||
+    (r.spent || 0) > 0 ||
+    (r.reach || 0) > 0 ||
+    m.engValue > 0 ||
+    m.linksValue > 0 ||
+    m.viewsValue > 0 ||
+    m.convValue > 0 ||
+    m.cpmValue > 0 ||
+    m.cpcValue > 0 ||
+    m.cThruValue > 0 ||
+    m.cIntValue > 0 ||
+    m.cConvValue > 0;
+
+  return !hasNumber;
+}
+
+export function filterActiveCampaigns(campaigns: CampaignRow[]): CampaignRow[] {
+  return campaigns.filter((c) => !isCampaignRowEmpty(c));
+}
 
 export interface ActiveCostColumnsResult {
   activeColumns: ColumnInfo[];
@@ -357,19 +428,20 @@ export function getActiveCostColumns(
   campaigns: CampaignRow[],
   omitEmpty: boolean
 ): ActiveCostColumnsResult {
+  const activeRows = filterActiveCampaigns(campaigns);
   let activeColumns: ColumnInfo[];
 
-  if (!omitEmpty || campaigns.length === 0) {
+  if (!omitEmpty || activeRows.length === 0) {
     activeColumns = COLUMNS_17_GUIDE;
   } else {
-    const metricsList = campaigns.map(getCampaignRowDisplayMetrics);
+    const metricsList = activeRows.map(getCampaignRowDisplayMetrics);
     const hasCol: Record<number, boolean> = {
-      1: campaigns.some((r) => hasFilledText(r.displayName || r.name)),
-      2: campaigns.some((r) => hasFilledText(r.format)),
-      3: campaigns.some((r) => hasFilledText(r.validity)),
-      4: campaigns.some((r) => (r.budget || 0) > 0),
-      5: campaigns.some((r) => (r.spent || 0) > 0),
-      6: campaigns.some((r) => (r.reach || 0) > 0),
+      1: activeRows.some((r) => hasFilledText(r.displayName !== undefined ? r.displayName : r.name)),
+      2: activeRows.some((r) => hasFilledText(r.format)),
+      3: activeRows.some((r) => hasFilledText(r.validity)),
+      4: activeRows.some((r) => (r.budget || 0) > 0),
+      5: activeRows.some((r) => (r.spent || 0) > 0),
+      6: activeRows.some((r) => (r.reach || 0) > 0),
       7: metricsList.some((m) => m.engValue > 0),
       8: metricsList.some((m) => m.linksValue > 0),
       9: metricsList.some((m) => m.viewsValue > 0),
@@ -378,9 +450,10 @@ export function getActiveCostColumns(
       12: metricsList.some((m) => m.cThruValue > 0),
       13: metricsList.some((m) => m.cIntValue > 0),
       14: metricsList.some((m) => m.cConvValue > 0),
-      15: campaigns.some((r) => hasFilledText(r.filtro)),
-      16: campaigns.some((r) => hasFilledText(r.cidade)),
+      15: activeRows.some((r) => hasFilledText(r.filtro)),
+      16: activeRows.some((r) => hasFilledText(r.cidade)),
       17: metricsList.some((m) => m.convValue > 0),
+      18: activeRows.some((r) => hasFilledText(r.observacao)),
     };
 
     const filtered = COLUMNS_17_GUIDE.filter((col) => hasCol[col.num]);

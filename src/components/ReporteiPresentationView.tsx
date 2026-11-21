@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   TrendingUp,
   DollarSign,
@@ -24,6 +24,7 @@ import { exportInteractiveWebReport } from '../lib/interactiveHtmlExport';
 import { SocialAudienceSection } from './SocialAudienceSection';
 import { EditableNumber, EditableText } from './EditableField';
 import { BRAND_LOGO_DATA_URI } from '../lib/brandLogo';
+import { filterActiveCampaigns } from '../lib/columnsGuide';
 
 interface ReporteiPresentationViewProps {
   meta: ReportMeta;
@@ -84,14 +85,16 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
   const fmtNum = (v: number) =>
     new Intl.NumberFormat('pt-BR').format(v || 0);
 
+  const activeCampaigns = useMemo(() => filterActiveCampaigns(campaigns), [campaigns]);
+
   // Consolidated Meta Ads Metrics
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalImpr = campaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalBudget = activeCampaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalImpr = activeCampaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
 
   const avgFrequency = totalReach > 0 ? (totalImpr / totalReach).toFixed(2) : '1.00';
   const avgCostPerConv = totalConv > 0 ? totalSpent / totalConv : 0;
@@ -117,11 +120,11 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
   };
 
   const handleExportHtml = () => {
-    exportInteractiveWebReport(meta, campaigns, capa);
+    exportInteractiveWebReport(meta, activeCampaigns, capa);
   };
 
   // Filtered campaigns for the Highlights grid
-  const filteredCampaigns = campaigns.filter((c) => {
+  const filteredCampaigns = activeCampaigns.filter((c) => {
     if (filterType === 'conv') return c.conv > 0;
     if (filterType === 'reels') return /^Reels/i.test(c.objective) || c.views > 0;
     if (filterType === 'alcance') return c.objective === 'Alc' || (/alcance/i.test(c.name) && !c.conv);
@@ -263,7 +266,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
     {
       id: 'actions',
       label: 'Ações Veiculadas',
-      value: String(campaigns.length),
+      value: String(activeCampaigns.length),
       subtext: 'Campanhas ativas no mês',
       icon: Layers,
       iconColorClass: 'text-neutral-300',
@@ -533,7 +536,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
       {/* SECTION: BUDGET DISTRIBUTION DONUT CHART */}
       {/* ======================================================================== */}
       <BudgetDonutChart
-        campaigns={campaigns}
+        campaigns={activeCampaigns}
         title="Distribuição Estratégica de Verba por Objetivo"
       />
 
@@ -568,7 +571,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              Todas ({campaigns.length})
+              Todas ({activeCampaigns.length})
             </button>
             <button
               type="button"
@@ -579,7 +582,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              WhatsApp ({campaigns.filter((c) => c.conv > 0).length})
+              WhatsApp ({activeCampaigns.filter((c) => c.conv > 0).length})
             </button>
             <button
               type="button"
@@ -590,7 +593,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              Reels ({campaigns.filter((c) => c.views > 0).length})
+              Reels ({activeCampaigns.filter((c) => c.views > 0).length})
             </button>
             <button
               type="button"
@@ -609,8 +612,8 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredCampaigns.map((c, index) => {
-            const maxConv = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.conv || 0)) : 0;
-            const maxReach = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.reach || 0)) : 0;
+            const maxConv = activeCampaigns.length > 0 ? Math.max(...activeCampaigns.map((x) => x.conv || 0)) : 0;
+            const maxReach = activeCampaigns.length > 0 ? Math.max(...activeCampaigns.map((x) => x.reach || 0)) : 0;
             const isTopConv = c.conv > 0 && c.conv >= maxConv;
             const isTopReach = c.reach > 0 && c.reach >= maxReach;
             const isReels = /^Reels/i.test(c.objective) || c.views > 0;
@@ -703,7 +706,7 @@ export const ReporteiPresentationView: React.FC<ReporteiPresentationViewProps> =
 
                     <div className="mb-1">
                       <EditableText
-                        value={c.displayName || c.name}
+                        value={c.displayName ?? c.name}
                         onChange={(v) => onUpdateCampaign?.(c.id, { displayName: v })}
                         isReadOnly={isReadOnly || !onUpdateCampaign}
                         placeholder="Nome da Ação"

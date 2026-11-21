@@ -24,6 +24,7 @@ import {
   sortCampaignRows
 } from './lib/metaAdsParser';
 import { exportToExcel } from './lib/excelExport';
+import { filterActiveCampaigns, isCampaignRowEmpty } from './lib/columnsGuide';
 import { SimpleFunctionalPdfReport } from './components/SimpleFunctionalPdfReport';
 
 const STORAGE_KEY = 'relatorio_ads_gemini_state_v1';
@@ -339,7 +340,7 @@ export default function App() {
     handleUpdateCampaign(campaignId, { cidade: newCidade });
   };
 
-  // Batch update filtro and cidade for all campaigns
+  // Batch update filtro and cidade for all active campaigns (never revive cleared empty rows)
   const handleBatchUpdateFiltroCidade = (filtro: string, cidade: string) => {
     const trimmedFiltro = filtro.trim();
     const trimmedCidade = cidade.trim();
@@ -347,26 +348,32 @@ export default function App() {
     if (trimmedCidade) setBatchCidade(trimmedCidade);
 
     setCampaigns((prev) =>
-      prev.map((c) => ({
-        ...c,
-        ...(trimmedFiltro ? { filtro: trimmedFiltro } : {}),
-        ...(trimmedCidade ? { cidade: trimmedCidade } : {})
-      }))
+      prev.map((c) => {
+        if (isCampaignRowEmpty(c)) return c;
+        return {
+          ...c,
+          ...(trimmedFiltro ? { filtro: trimmedFiltro } : {}),
+          ...(trimmedCidade ? { cidade: trimmedCidade } : {})
+        };
+      })
     );
   };
 
-  // Fill any empty filtro/cidade fields from pending batch inputs when navigating steps
+  // Fill any empty filtro/cidade fields on active rows from pending batch inputs when navigating steps
   const applyPendingBatchToEmptyRows = () => {
     const trimmedFiltro = batchFiltro.trim();
     const trimmedCidade = batchCidade.trim();
     if (!trimmedFiltro && !trimmedCidade) return;
 
     setCampaigns((prev) =>
-      prev.map((c) => ({
-        ...c,
-        ...(!c.filtro?.trim() && trimmedFiltro ? { filtro: trimmedFiltro } : {}),
-        ...(!c.cidade?.trim() && trimmedCidade ? { cidade: trimmedCidade } : {})
-      }))
+      prev.map((c) => {
+        if (isCampaignRowEmpty(c)) return c;
+        return {
+          ...c,
+          ...(!c.filtro?.trim() && trimmedFiltro ? { filtro: trimmedFiltro } : {}),
+          ...(!c.cidade?.trim() && trimmedCidade ? { cidade: trimmedCidade } : {})
+        };
+      })
     );
   };
 
@@ -379,14 +386,15 @@ export default function App() {
 
   // Batch AI classification with Gemini
   const handleAiClassify = async () => {
-    if (!campaigns.length) return;
+    const activeRows = filterActiveCampaigns(campaigns);
+    if (!activeRows.length) return;
     setIsAiClassifying(true);
 
     try {
       const res = await fetch('/api/gemini/classify-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaigns }),
+        body: JSON.stringify({ campaigns: activeRows }),
       });
 
       const data = await res.json();
@@ -406,6 +414,7 @@ export default function App() {
       // Map back to campaigns
       setCampaigns((prev) => {
         const next = prev.map((camp) => {
+          if (isCampaignRowEmpty(camp)) return camp;
           const match = classifications.find((c) => c.id === camp.id);
           if (match) {
             const nextFormat = match.format || camp.format;
@@ -435,10 +444,11 @@ export default function App() {
 
   // Export to Excel
   const handleExportExcel = async () => {
-    if (!campaigns.length || !meta) return;
+    const activeRows = filterActiveCampaigns(campaigns);
+    if (!activeRows.length || !meta) return;
     setIsExportingExcel(true);
     try {
-      await exportToExcel(meta, campaigns, capa);
+      await exportToExcel(meta, activeRows, capa);
     } catch (err: any) {
       console.error(err);
       alert('Erro ao exportar planilha Excel: ' + err.message);
@@ -464,8 +474,9 @@ export default function App() {
 
   // Generate personalized, exclusive read-only presentation link for the client
   const handleCreateClientLink = async (preferredTab: 'reportei' | 'table' = 'reportei'): Promise<string> => {
-    if (!meta || campaigns.length === 0) {
-      throw new Error('Não há dados carregados para gerar o link.');
+    const activeRows = filterActiveCampaigns(campaigns);
+    if (!meta || activeRows.length === 0) {
+      throw new Error('Não há dados preenchidos para gerar o link.');
     }
 
     const res = await fetch('/api/presentations', {
@@ -473,7 +484,7 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         meta,
-        campaigns,
+        campaigns: activeRows,
         capa,
         initialTab: preferredTab,
       }),
@@ -487,7 +498,7 @@ export default function App() {
     try {
       localStorage.setItem(
         `${PRESENTATION_CACHE_PREFIX}${data.id}`,
-        JSON.stringify({ meta, campaigns, capa, initialTab: preferredTab })
+        JSON.stringify({ meta, campaigns: activeRows, capa, initialTab: preferredTab })
       );
     } catch {
       // Ignore storage quota issues
@@ -637,7 +648,7 @@ export default function App() {
               <div className="print-only">
                 <SimpleFunctionalPdfReport
                   meta={meta}
-                  campaigns={campaigns}
+                  campaigns={filterActiveCampaigns(campaigns)}
                   capa={capa}
                 />
               </div>

@@ -17,8 +17,10 @@ import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { SocialAudienceSection, hasSocialAudienceData } from './SocialAudienceSection';
 import { extractDateFromName } from '../lib/metaAdsParser';
 import {
+  filterActiveCampaigns,
   getActiveCostColumns,
-  getCampaignRowDisplayMetrics
+  getCampaignRowDisplayMetrics,
+  hasFilledText
 } from '../lib/columnsGuide';
 import { BRAND_LOGO_DATA_URI } from '../lib/brandLogo';
 
@@ -51,16 +53,18 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
     return new Intl.NumberFormat('pt-BR').format(v);
   };
 
+  const activeCampaigns = useMemo(() => filterActiveCampaigns(campaigns), [campaigns]);
+
   // Consolidated Meta Ads Metrics (matching ReporteiPresentationView & UnifiedTraditionalTable)
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalInt = campaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalBudget = activeCampaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalInt = activeCampaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
   const totalImpr =
-    campaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
+    activeCampaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
 
   const avgFrequency = totalReach > 0 ? (totalImpr / totalReach).toFixed(2) : '1.00';
   const avgCostPerConv = totalConv > 0 ? totalSpent / totalConv : 0;
@@ -68,8 +72,8 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
   const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
   const avgCTR = totalImpr > 0 ? ((totalLinks / totalImpr) * 100).toFixed(2) : '0.00';
 
-  const maxConv = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.conv || 0)) : 0;
-  const maxReach = campaigns.length > 0 ? Math.max(...campaigns.map((x) => x.reach || 0)) : 0;
+  const maxConv = activeCampaigns.length > 0 ? Math.max(...activeCampaigns.map((x) => x.conv || 0)) : 0;
+  const maxReach = activeCampaigns.length > 0 ? Math.max(...activeCampaigns.map((x) => x.reach || 0)) : 0;
   const showSocial = hasSocialAudienceData(capa);
 
   const {
@@ -79,9 +83,14 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
     allVisible,
     leadingColSpan,
     pdfWidths,
-  } = useMemo(() => getActiveCostColumns(campaigns, true), [campaigns]);
+  } = useMemo(() => getActiveCostColumns(activeCampaigns, true), [activeCampaigns]);
   const vis = (colNum: number) => visibleSet.has(colNum);
   const colBadgeNum = (colNum: number) => displayNumMap.get(colNum) ?? colNum;
+  const lastMetricColNum = useMemo(
+    () => activeColumns.filter((c) => c.num < 18).reduce((max, c) => Math.max(max, c.num), 0),
+    [activeColumns]
+  );
+  const cellR = (colNum: number) => (colNum !== lastMetricColNum ? 'border-r ' : '');
 
   // Budget Distribution Donut Data (matching BudgetDonutChart Macro-Pilares)
   const chartData = useMemo(() => {
@@ -156,7 +165,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
       },
     };
 
-    campaigns.forEach((c) => {
+    activeCampaigns.forEach((c) => {
       const obj = (c.objective || '').trim();
       const effectiveVal = c.budget && c.budget > 0 ? c.budget : c.spent || 0;
 
@@ -197,7 +206,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
         }))
         .sort((a, b) => b.value - a.value),
     };
-  }, [campaigns]);
+  }, [activeCampaigns]);
 
   // SVG Donut Geometry
   const donutRadius = 80;
@@ -271,7 +280,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
     },
     {
       label: 'Ações Veiculadas',
-      value: String(campaigns.length),
+      value: String(activeCampaigns.length),
       subtext: 'Campanhas ativas no mês',
       icon: Layers,
       iconColor: 'text-neutral-300',
@@ -418,7 +427,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
                   {fmtBRL(chartData.total)}
                 </span>
                 <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full mt-1 border border-amber-500/20">
-                  {campaigns.length} ações veiculadas
+                  {activeCampaigns.length} ações veiculadas
                 </span>
               </div>
             </div>
@@ -521,12 +530,12 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
             </p>
           </div>
           <span className="text-xs font-bold text-neutral-400">
-            {campaigns.length} Ações Veiculadas
+            {activeCampaigns.length} Ações Veiculadas
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3.5">
-          {campaigns.map((c, index) => {
+          {activeCampaigns.map((c, index) => {
             const isTopConv = c.conv > 0 && c.conv >= maxConv;
             const isTopReach = c.reach > 0 && c.reach >= maxReach;
             const isReels = /^Reels/i.test(c.objective) || c.views > 0;
@@ -590,7 +599,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
                     </div>
 
                     <h4 className="text-xs font-extrabold text-white leading-snug">
-                      {c.displayName || c.name}
+                      {c.displayName ?? c.name}
                     </h4>
                     <p className="text-[10px] text-neutral-400 mt-0.5">
                       Período de Veiculação: <span className="text-neutral-300">{c.validity || 'Mês vigente'}</span>
@@ -653,7 +662,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
         <div className="p-4 bg-gradient-to-r from-[#181a20] via-[#1c1e26] to-[#181a20] border-b border-[#2b2d33] flex items-center justify-between gap-4">
           <div>
             <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30 mb-1">
-              Planilha de Custos · {allVisible ? '17 Colunas Oficiais Meta Ads' : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
+              Planilha de Custos · {allVisible ? `${activeColumns.length} Colunas Oficiais Meta Ads` : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
             </span>
             <h3 className="text-lg font-black text-white tracking-tight">
               Ações Mensais do Período{' '}
@@ -663,7 +672,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
             </h3>
           </div>
           <span className="text-[11px] font-mono text-neutral-400">
-            {campaigns.length} ações consolidadas
+            {activeCampaigns.length} ações consolidadas
           </span>
         </div>
 
@@ -694,12 +703,13 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
               {vis(14) && <th style={{ width: pdfWidths[14] }} className="py-2 px-1 border-r border-[#2b2d33] text-right bg-emerald-950/20 text-emerald-300">{colBadgeNum(14)}. C/Conv</th>}
               {vis(15) && <th style={{ width: pdfWidths[15] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(15)}. Filtro</th>}
               {vis(16) && <th style={{ width: pdfWidths[16] }} className="py-2 px-1 border-r border-[#2b2d33] text-center">{colBadgeNum(16)}. Cidade</th>}
-              {vis(17) && <th style={{ width: pdfWidths[17] }} className="py-2 px-1 text-right bg-emerald-950/40 text-emerald-300">{colBadgeNum(17)}. Conv.</th>}
+              {vis(17) && <th style={{ width: pdfWidths[17] }} className={`py-2 px-1 ${vis(18) ? 'border-r border-[#2b2d33] ' : ''}text-right bg-emerald-950/40 text-emerald-300`}>{colBadgeNum(17)}. Conv.</th>}
+              {vis(18) && <th style={{ width: pdfWidths[18] }} className="py-2 px-1 text-left">Obs.</th>}
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-[#23252b]">
-            {campaigns.map((r, idx) => {
+          <tbody>
+            {activeCampaigns.map((r, idx) => {
               const curDate = extractDateFromName(r.name) || (r.sortDate ? new Date(r.sortDate) : null);
               const curDateKey = curDate ? curDate.getTime() : 'none';
               const showSeparator = idx > 0 && curDateKey !== lastDateKey;
@@ -716,99 +726,113 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
               const colCInt = m.cIntValue > 0 ? fmtBRL(m.cIntValue) : '—';
               const colCConv = m.cConvValue > 0 ? fmtBRL(m.cConvValue) : '—';
               const colConv = m.convValue > 0 ? fmtNum(m.convValue) : '—';
+              const rowHasObs = hasFilledText(r.observacao);
 
               return (
                 <React.Fragment key={r.id}>
                   {showSeparator && (
-                    <tr className="bg-[#101114] border-y border-[#2b2d33] h-1.5">
-                      <td colSpan={activeColumns.length} className="h-1.5 p-0" />
+                    <tr className="h-1.5">
+                      <td
+                        colSpan={vis(18) ? Math.max(1, activeColumns.length - 1) : activeColumns.length}
+                        className="h-1.5 p-0 bg-[#101114] border-y border-[#2b2d33]"
+                      />
+                      {vis(18) && <td className="h-1.5 p-0 bg-[#141518] border-0" />}
                     </tr>
                   )}
                   <tr className="print-avoid-break">
                     {vis(1) && (
-                      <td className="py-1.5 px-1.5 border-r border-[#23252b] text-left font-medium text-white break-words leading-tight">
-                        {r.displayName || r.name}
+                      <td className={`py-1.5 px-1.5 border-b ${cellR(1)}border-[#23252b] text-left font-medium text-white break-words leading-tight`}>
+                        {r.displayName ?? r.name}
                       </td>
                     )}
                     {vis(2) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-300 break-words">
+                      <td className={`py-1.5 px-1 border-b ${cellR(2)}border-[#23252b] text-center text-neutral-300 break-words`}>
                         {r.format}
                       </td>
                     )}
                     {vis(3) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-400 font-mono">
+                      <td className={`py-1.5 px-1 border-b ${cellR(3)}border-[#23252b] text-center text-neutral-400 font-mono`}>
                         {r.validity || '—'}
                       </td>
                     )}
                     {vis(4) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                      <td className={`py-1.5 px-1 border-b ${cellR(4)}border-[#23252b] text-right font-mono text-neutral-300`}>
                         {fmtBRL(r.budget)}
                       </td>
                     )}
                     {vis(5) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono font-bold text-amber-400 bg-amber-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(5)}border-[#23252b] text-right font-mono font-bold text-amber-400 bg-amber-950/10`}>
                         {fmtBRL(r.spent)}
                       </td>
                     )}
                     {vis(6) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 font-semibold bg-blue-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(6)}border-[#23252b] text-right font-mono text-blue-300 font-semibold bg-blue-950/10`}>
                         {colReach}
                       </td>
                     )}
                     {vis(7) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                      <td className={`py-1.5 px-1 border-b ${cellR(7)}border-[#23252b] text-right font-mono text-neutral-300`}>
                         {colEng}
                       </td>
                     )}
                     {vis(8) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                      <td className={`py-1.5 px-1 border-b ${cellR(8)}border-[#23252b] text-right font-mono text-neutral-300`}>
                         {colLinks}
                       </td>
                     )}
                     {vis(9) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 font-semibold bg-purple-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(9)}border-[#23252b] text-right font-mono text-purple-300 font-semibold bg-purple-950/10`}>
                         {colViews}
                       </td>
                     )}
                     {vis(10) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-blue-300 bg-blue-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(10)}border-[#23252b] text-right font-mono text-blue-300 bg-blue-950/10`}>
                         {colCPM}
                       </td>
                     )}
                     {vis(11) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                      <td className={`py-1.5 px-1 border-b ${cellR(11)}border-[#23252b] text-right font-mono text-neutral-300`}>
                         {colCPC}
                       </td>
                     )}
                     {vis(12) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-purple-300 bg-purple-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(12)}border-[#23252b] text-right font-mono text-purple-300 bg-purple-950/10`}>
                         {colThru}
                       </td>
                     )}
                     {vis(13) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-neutral-300">
+                      <td className={`py-1.5 px-1 border-b ${cellR(13)}border-[#23252b] text-right font-mono text-neutral-300`}>
                         {colCInt}
                       </td>
                     )}
                     {vis(14) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-right font-mono text-emerald-300 bg-emerald-950/10">
+                      <td className={`py-1.5 px-1 border-b ${cellR(14)}border-[#23252b] text-right font-mono text-emerald-300 bg-emerald-950/10`}>
                         {colCConv}
                       </td>
                     )}
                     {vis(15) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
+                      <td className={`py-1.5 px-1 border-b ${cellR(15)}border-[#23252b] text-center text-neutral-200 break-words leading-tight`}>
                         {r.filtro || '—'}
                       </td>
                     )}
                     {vis(16) && (
-                      <td className="py-1.5 px-1 border-r border-[#23252b] text-center text-neutral-200 break-words leading-tight">
+                      <td className={`py-1.5 px-1 border-b ${cellR(16)}border-[#23252b] text-center text-neutral-200 break-words leading-tight`}>
                         {r.cidade || '—'}
                       </td>
                     )}
                     {vis(17) && (
-                      <td className="py-1.5 px-1 text-right font-mono font-bold text-emerald-400 bg-emerald-950/20">
+                      <td className={`py-1.5 px-1 border-b ${cellR(17)}border-[#23252b] text-right font-mono font-bold text-emerald-400 bg-emerald-950/20`}>
                         {colConv !== '—' ? `${colConv}` : '—'}
                       </td>
+                    )}
+                    {vis(18) && (
+                      rowHasObs ? (
+                        <td className="py-1.5 px-1.5 border border-[#2b2d33] bg-[#181a20] text-left text-neutral-200 break-words leading-tight">
+                          {r.observacao}
+                        </td>
+                      ) : (
+                        <td className="py-1.5 px-1 border-0 bg-[#141518]" />
+                      )
                     )}
                   </tr>
                 </React.Fragment>
@@ -816,78 +840,81 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
             })}
           </tbody>
 
-          <tfoot className="bg-[#16171d] border-t-2 border-amber-500 font-mono text-[8px]">
+          <tfoot className="bg-[#16171d] font-mono text-[8px]">
             <tr className="text-white font-bold print-avoid-break">
               {leadingColSpan > 0 && (
-                <td colSpan={leadingColSpan} className="py-2 px-1.5 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
-                  Total ({campaigns.length} ações)
+                <td colSpan={leadingColSpan} className={`py-2 px-1.5 border-t-2 border-t-amber-500 ${lastMetricColNum > 3 ? 'border-r border-r-[#2b2d33] ' : ''}text-left uppercase font-sans tracking-wide`}>
+                  Total ({activeCampaigns.length} ações)
                 </td>
               )}
               {vis(4) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(4)}border-r-[#2b2d33] text-right text-neutral-300`}>
                   {fmtBRL(totalBudget)}
                 </td>
               )}
               {vis(5) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-amber-300 bg-amber-950/30">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(5)}border-r-[#2b2d33] text-right font-black text-amber-300 bg-amber-950/30`}>
                   {fmtBRL(totalSpent)}
                 </td>
               )}
               {vis(6) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-blue-300 bg-blue-950/30">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(6)}border-r-[#2b2d33] text-right font-black text-blue-300 bg-blue-950/30`}>
                   {fmtNum(totalReach)}
                 </td>
               )}
               {vis(7) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(7)}border-r-[#2b2d33] text-right text-neutral-300`}>
                   {fmtNum(totalInt)}
                 </td>
               )}
               {vis(8) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(8)}border-r-[#2b2d33] text-right text-neutral-300`}>
                   {fmtNum(totalLinks)}
                 </td>
               )}
               {vis(9) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right font-black text-purple-300 bg-purple-950/30">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(9)}border-r-[#2b2d33] text-right font-black text-purple-300 bg-purple-950/30`}>
                   {fmtNum(totalViews)}
                 </td>
               )}
               {vis(10) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-blue-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(10)}border-r-[#2b2d33] text-right text-blue-300`}>
                   {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
                 </td>
               )}
               {vis(11) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(11)}border-r-[#2b2d33] text-right text-neutral-300`}>
                   {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
                 </td>
               )}
               {vis(12) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-purple-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(12)}border-r-[#2b2d33] text-right text-purple-300`}>
                   {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
                 </td>
               )}
               {vis(13) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-neutral-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(13)}border-r-[#2b2d33] text-right text-neutral-300`}>
                   {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
                 </td>
               )}
               {vis(14) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-right text-emerald-300">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(14)}border-r-[#2b2d33] text-right text-emerald-300`}>
                   {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
                 </td>
               )}
               {vis(15) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(15)}border-r-[#2b2d33] text-center text-neutral-500 font-sans`}>—</td>
               )}
               {vis(16) && (
-                <td className="py-2 px-1 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">—</td>
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(16)}border-r-[#2b2d33] text-center text-neutral-500 font-sans`}>—</td>
               )}
               {vis(17) && (
-                <td className="py-2 px-1 text-right font-black text-emerald-400 bg-emerald-950/40">
+                <td className={`py-2 px-1 border-t-2 border-t-amber-500 ${cellR(17)}border-r-[#2b2d33] text-right font-black text-emerald-400 bg-emerald-950/40`}>
                   {totalConv > 0 ? `${totalConv}` : '—'}
                 </td>
+              )}
+              {vis(18) && (
+                <td className="py-2 px-1 border-0 bg-[#141518]" />
               )}
             </tr>
           </tfoot>
@@ -897,6 +924,9 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
       {/* ======================================================================== */}
       {/* 6. DICIONÁRIO DAS COLUNAS VISÍVEIS DA PLANILHA */}
       {/* ======================================================================== */}
+      {(() => {
+        const glossaryColumns = activeColumns.filter((c) => c.num !== 18);
+        return (
       <div className="bg-[#141518] rounded-2xl border border-[#2b2d33] p-5 shadow-xl space-y-4 print-page-break">
         <div className="border-b border-[#2b2d33] pb-3 print-avoid-break">
           <div className="flex items-center gap-2">
@@ -906,7 +936,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
             </span>
           </div>
           <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
-            O que cada uma das {allVisible ? '17' : activeColumns.length} colunas significa e por que é importante?
+            O que cada uma das {glossaryColumns.length} colunas significa e por que é importante?
           </h3>
           <p className="text-[11px] text-neutral-400 leading-relaxed">
             Consulte abaixo a descrição didática de cada coluna da planilha, por que ela é indispensável para o cliente e como analisar seus números com precisão.
@@ -914,7 +944,7 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          {activeColumns.map((col) => (
+          {glossaryColumns.map((col) => (
             <div
               key={col.num}
               className="rounded-xl border border-[#2b2d33] bg-[#181a20] p-3 flex flex-col justify-between space-y-2 print-avoid-break"
@@ -962,6 +992,8 @@ export const SimpleFunctionalPdfReport: React.FC<SimpleFunctionalPdfReportProps>
           ))}
         </div>
       </div>
+        );
+      })()}
     </div>
   );
 };

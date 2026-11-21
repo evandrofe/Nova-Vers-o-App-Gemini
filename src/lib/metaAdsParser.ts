@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { CampaignRow, CapaData, ClassifierConfig, ObjectiveType, ReportMeta } from '../types';
+import { isCampaignRowEmpty } from './columnsGuide';
 
 export const OBJ_LABELS: Record<ObjectiveType, string> = {
   Alc: 'Alcance',
@@ -551,6 +552,7 @@ export function parseMatrixRows(rows: any[][], customConfig?: ClassifierConfig):
   const iTRes = getIdx(headers, ['tipo de resultado', 'result type', 'indicador de resultados', 'result indicator']);
   const iFiltro = getIdx(headers, ['filtro', 'filter']);
   const iCidade = getIdx(headers, ['cidade', 'city', 'municipio', 'localizacao', 'location']);
+  const iObs = getIdx(headers, ['observacao', 'observacoes', 'obs', 'notas', 'notes']);
 
   const g = (row: any[], idx: number): string => {
     if (idx < 0 || idx >= row.length) return '';
@@ -683,6 +685,7 @@ export function parseMatrixRows(rows: any[][], customConfig?: ClassifierConfig):
       cConv,
       filtro: g(row, iFiltro) || '',
       cidade: g(row, iCidade) || '',
+      observacao: g(row, iObs) || '',
       mainMetric: mainMetricVal || (objective === 'Alc' ? 'Alcance' : '')
     });
   }
@@ -775,6 +778,19 @@ export function applyCampaignPatch(
 
   if (('spent' in patch || 'conv' in patch) && !('cConv' in patch)) {
     next.cConv = spent > 0 && conv > 0 ? spent / conv : 0;
+  }
+
+  if (isCampaignRowEmpty(next)) {
+    next.impr = 0;
+    next.eng = 0;
+    next.links = 0;
+    next.views = 0;
+    next.conv = 0;
+    next.cpm = 0;
+    next.cpc = 0;
+    next.cThru = 0;
+    next.cInt = 0;
+    next.cConv = 0;
   }
 
   return next;

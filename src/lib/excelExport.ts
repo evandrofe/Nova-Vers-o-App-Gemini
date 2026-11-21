@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { OBJ_LABELS } from './metaAdsParser';
+import { filterActiveCampaigns, hasFilledText } from './columnsGuide';
 
 export async function exportToExcel(
   meta: ReportMeta,
@@ -72,15 +73,16 @@ export async function exportToExcel(
   wb.creator = 'Relatório de Impulsionamento Meta Ads';
   wb.created = new Date();
 
-  // Consolidação de métricas globais
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalInt = campaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
-  const totalImpr = campaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
+  // Consolidação de métricas globais (somente linhas ativas com dados)
+  const activeCampaigns = filterActiveCampaigns(campaigns);
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalBudget = activeCampaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalInt = activeCampaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
+  const totalImpr = activeCampaigns.reduce((acc, c) => acc + (c.impr || 0), 0) || Math.round(totalReach * 1.55);
 
   const avgFrequency = totalReach > 0 ? totalImpr / totalReach : 1;
   const avgCostPerConv = totalConv > 0 ? totalSpent / totalConv : 0;
@@ -252,7 +254,7 @@ export async function exportToExcel(
   });
   destCurRow++;
 
-  campaigns.forEach((c) => {
+  activeCampaigns.forEach((c) => {
     let mainResult = '—';
     let mainCost = 0;
     if (c.conv > 0) {
@@ -270,7 +272,7 @@ export async function exportToExcel(
     }
 
     const rowVals = [
-      c.displayName || c.name,
+      c.displayName ?? c.name,
       c.format,
       OBJ_LABELS[c.objective] || c.objective,
       c.validity || '—',
@@ -302,7 +304,7 @@ export async function exportToExcel(
   const rDestTot = wsDest.getRow(destCurRow);
   rDestTot.height = 24;
   const totDestVals = [
-    `TOTAL CONSOLIDADO (${campaigns.length} AÇÕES)`,
+    `TOTAL CONSOLIDADO (${activeCampaigns.length} AÇÕES)`,
     '',
     '',
     '',
@@ -476,8 +478,12 @@ export async function exportToExcel(
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // PASTA 2: PLANILHA DE CUSTOS (17 COLUNAS COMPLETAS + LEGENDA DIDÁTICA)
+  // PASTA 2: PLANILHA DE CUSTOS (17 OU 18 COLUNAS + LEGENDA DIDÁTICA)
   // ═════════════════════════════════════════════════════════════════════════
+  const hasObservacao = activeCampaigns.some((r) => hasFilledText(r.observacao));
+  const totalCols = hasObservacao ? 18 : 17;
+  const lastColLetter = hasObservacao ? 'R' : 'Q';
+
   const wsMatriz = wb.addWorksheet('Planilha de Custos');
   wsMatriz.columns = [
     { width: 30 }, // 1. NOME DA AÇÃO
@@ -496,10 +502,11 @@ export async function exportToExcel(
     { width: 20 }, // 14. CUSTO POR CONVERSA
     { width: 16 }, // 15. FILTRO
     { width: 16 }, // 16. CIDADE
-    { width: 22 }  // 17. CONVERSAS INICIADAS
+    { width: 22 }, // 17. CONVERSAS INICIADAS
+    ...(hasObservacao ? [{ width: 28 }] : []) // 18. OBSERVAÇÃO (somente quando preenchida)
   ];
 
-  const HDR_17 = [
+  const HDR_MATRIZ = [
     'NOME DA AÇÃO',
     'FORMATO',
     'VALIDADE',
@@ -516,15 +523,16 @@ export async function exportToExcel(
     'CUSTO POR CONVERSA',
     'FILTRO',
     'CIDADE',
-    'CONVERSAS INICIADAS'
+    'CONVERSAS INICIADAS',
+    ...(hasObservacao ? ['OBSERVAÇÃO'] : [])
   ];
 
   let matCurRow = 1;
   const rMatTop = wsMatriz.getRow(matCurRow);
   rMatTop.height = 34;
-  wsMatriz.mergeCells(`A${matCurRow}:Q${matCurRow}`);
+  wsMatriz.mergeCells(`A${matCurRow}:${lastColLetter}${matCurRow}`);
   const cMatTop = wsMatriz.getCell(`A${matCurRow}`);
-  cMatTop.value = `PLANILHA DE CUSTOS UNIFICADA DE IMPULSIONAMENTO (17 COLUNAS) • ${meta.cliente.toUpperCase()}`;
+  cMatTop.value = `PLANILHA DE CUSTOS UNIFICADA DE IMPULSIONAMENTO (${totalCols} COLUNAS) • ${meta.cliente.toUpperCase()}`;
   cMatTop.fill = fl(C.orange);
   cMatTop.font = fn(true, 13, C.white);
   cMatTop.alignment = al('center', 'middle');
@@ -533,7 +541,7 @@ export async function exportToExcel(
 
   const rMatHead = wsMatriz.getRow(matCurRow);
   rMatHead.height = 24;
-  HDR_17.forEach((h, ci) => {
+  HDR_MATRIZ.forEach((h, ci) => {
     const cell = rMatHead.getCell(ci + 1);
     cell.value = h;
     cell.fill = fl(C.gray1);
@@ -544,12 +552,12 @@ export async function exportToExcel(
   matCurRow++;
 
   let lastDateKeyXl = '';
-  campaigns.forEach((r) => {
+  activeCampaigns.forEach((r) => {
     const curDate = r.sortDate ? new Date(r.sortDate) : null;
     const curDateKey = curDate ? curDate.getTime() : 'none';
 
     if (lastDateKeyXl !== '' && curDateKey !== lastDateKeyXl) {
-      const rBlank = wsMatriz.addRow(Array(17).fill(''));
+      const rBlank = wsMatriz.addRow(Array(totalCols).fill(''));
       rBlank.height = 10;
       for (let ci = 1; ci <= 17; ci++) {
         rBlank.getCell(ci).fill = fl(C.separator);
@@ -563,9 +571,10 @@ export async function exportToExcel(
     const isReelsXl = /^Reels/i.test(o);
     const isAlcanceRow = o === 'Alc';
     const isDuplicateReach = isAlcanceRow && r.reach > 0 && r.eng === r.reach;
+    const rowHasObs = hasFilledText(r.observacao);
 
     const vals = [
-      r.displayName || r.name,
+      r.displayName ?? r.name,
       r.format,
       r.validity || '-',
       r.budget > 0 ? r.budget : '-',
@@ -581,7 +590,8 @@ export async function exportToExcel(
       r.cConv > 0 ? r.cConv : '-',
       r.filtro || '-',
       r.cidade || '-',
-      r.conv > 0 ? r.conv : '-'
+      r.conv > 0 ? r.conv : '-',
+      ...(hasObservacao ? [rowHasObs ? (r.observacao || '').trim() : ''] : [])
     ];
 
     const row = wsMatriz.addRow(vals);
@@ -589,9 +599,12 @@ export async function exportToExcel(
 
     vals.forEach((v, ci) => {
       const cell = row.getCell(ci + 1);
+      if (ci === 17 && !rowHasObs) {
+        return;
+      }
       cell.fill = fl(C.white);
       cell.font = fn(false, 9.5, C.black);
-      cell.alignment = ci === 0 ? al('left', 'middle', true) : al('center', 'middle');
+      cell.alignment = ci === 0 || ci === 17 ? al('left', 'middle', true) : al('center', 'middle');
       cell.border = bAll;
 
       if (typeof v === 'number') {
@@ -605,7 +618,7 @@ export async function exportToExcel(
   // Linha de Subtotal / Total Geral da Matriz
   const grandVals = [
     'TOTAL GERAL CONSOLIDADO',
-    `${campaigns.length} campanhas`,
+    `${activeCampaigns.length} campanhas`,
     '-',
     totalBudget > 0 ? totalBudget : '-',
     totalSpent > 0 ? totalSpent : '-',
@@ -620,12 +633,14 @@ export async function exportToExcel(
     totalConv > 0 && totalSpent > 0 ? totalSpent / totalConv : '-',
     '-',
     '-',
-    totalConv > 0 ? totalConv : '-'
+    totalConv > 0 ? totalConv : '-',
+    ...(hasObservacao ? [''] : [])
   ];
 
   const rMatTot = wsMatriz.addRow(grandVals);
   rMatTot.height = 24;
   grandVals.forEach((v, ci) => {
+    if (ci === 17) return;
     const cell = rMatTot.getCell(ci + 1);
     cell.fill = fl(C.totalBg);
     cell.font = fn(true, 10.5, C.black);
@@ -636,12 +651,12 @@ export async function exportToExcel(
   });
   matCurRow += 2;
 
-  // LEGENDA DIDÁTICA COMPLETA DAS 17 COLUNAS NA MATRIZ
+  // LEGENDA DIDÁTICA COMPLETA DAS COLUNAS NA MATRIZ
   const rMatLegHead = wsMatriz.getRow(matCurRow);
   rMatLegHead.height = 24;
-  wsMatriz.mergeCells(`A${matCurRow}:Q${matCurRow}`);
+  wsMatriz.mergeCells(`A${matCurRow}:${lastColLetter}${matCurRow}`);
   const cMatLegHead = wsMatriz.getCell(`A${matCurRow}`);
-  cMatLegHead.value = 'GUIA DIDÁTICO E LEGENDA EXPLICATIVA DAS 17 COLUNAS';
+  cMatLegHead.value = `GUIA DIDÁTICO E LEGENDA EXPLICATIVA DAS ${totalCols} COLUNAS`;
   cMatLegHead.fill = fl(C.dark);
   cMatLegHead.font = fn(true, 11, C.white);
   cMatLegHead.alignment = al('center', 'middle');
@@ -675,13 +690,13 @@ export async function exportToExcel(
       item.desc,
       '', '', '', '',
       item.import,
-      '', '', '', '', '', '', '', ''
+      ...Array(totalCols - 9).fill('')
     ]);
     row.height = 22;
     wsMatriz.mergeCells(`D${row.number}:H${row.number}`);
-    wsMatriz.mergeCells(`I${row.number}:Q${row.number}`);
+    wsMatriz.mergeCells(`I${row.number}:${lastColLetter}${row.number}`);
 
-    for (let ci = 1; ci <= 17; ci++) {
+    for (let ci = 1; ci <= totalCols; ci++) {
       const cell = row.getCell(ci);
       cell.fill = fl(C.white);
       cell.font = fn(false, 9, C.dark);

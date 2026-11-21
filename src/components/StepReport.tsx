@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileSpreadsheet,
   Printer,
@@ -16,6 +16,7 @@ import { ReporteiPresentationView } from './ReporteiPresentationView';
 import { UnifiedTraditionalTable } from './UnifiedTraditionalTable';
 import { SimpleFunctionalPdfReport } from './SimpleFunctionalPdfReport';
 import { EditableText } from './EditableField';
+import { filterActiveCampaigns } from '../lib/columnsGuide';
 
 interface StepReportProps {
   meta: ReportMeta;
@@ -75,15 +76,16 @@ export const StepReport: React.FC<StepReportProps> = ({
   }, [initialTab]);
 
   const isReadOnlyView = isPresentationMode || isClientLocked;
+  const activeCampaigns = useMemo(() => filterActiveCampaigns(campaigns), [campaigns]);
 
-  // Grand totals
-  const totalSpent = campaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
-  const totalBudget = campaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
-  const totalReach = campaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
-  const totalViews = campaigns.reduce((acc, c) => acc + (c.views || 0), 0);
-  const totalConv = campaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
-  const totalLinks = campaigns.reduce((acc, c) => acc + (c.links || 0), 0);
-  const totalInt = campaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
+  // Grand totals (computed strictly from active non-empty rows)
+  const totalSpent = activeCampaigns.reduce((acc, c) => acc + (c.spent || 0), 0);
+  const totalBudget = activeCampaigns.reduce((acc, c) => acc + (c.budget || 0), 0);
+  const totalReach = activeCampaigns.reduce((acc, c) => acc + (c.reach || 0), 0);
+  const totalViews = activeCampaigns.reduce((acc, c) => acc + (c.views || 0), 0);
+  const totalConv = activeCampaigns.reduce((acc, c) => acc + (c.conv || 0), 0);
+  const totalLinks = activeCampaigns.reduce((acc, c) => acc + (c.links || 0), 0);
+  const totalInt = activeCampaigns.reduce((acc, c) => acc + (c.eng || 0), 0);
 
   // Formatting helpers
   const fmtBRL = (v: number) =>
@@ -116,7 +118,7 @@ export const StepReport: React.FC<StepReportProps> = ({
                     <span>Prévia do Relatório PDF</span>
                   </h3>
                   <p className="text-[11px] text-neutral-400">
-                    Modelo idêntico à apresentação online: KPIs, Gráfico de Verba, Destaques, Audiência Social, Planilha de 17 Colunas e Glossário
+                    Modelo idêntico à apresentação online: KPIs, Gráfico de Verba, Destaques, Audiência Social, Planilha de Custos e Glossário
                   </p>
                 </div>
               </div>
@@ -145,7 +147,7 @@ export const StepReport: React.FC<StepReportProps> = ({
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#07080a]">
               <SimpleFunctionalPdfReport
                 meta={meta}
-                campaigns={campaigns}
+                campaigns={activeCampaigns}
                 capa={capa}
               />
             </div>
@@ -274,7 +276,7 @@ export const StepReport: React.FC<StepReportProps> = ({
         <div className="space-y-8">
           <ReporteiPresentationView
             meta={meta}
-            campaigns={campaigns}
+            campaigns={activeCampaigns}
             capa={capa}
             onExportExcel={onExportExcel}
             isExportingExcel={isExportingExcel}
@@ -288,7 +290,7 @@ export const StepReport: React.FC<StepReportProps> = ({
           />
 
           <UnifiedTraditionalTable
-            campaigns={campaigns}
+            campaigns={isReadOnlyView ? activeCampaigns : campaigns}
             meta={meta}
             capa={capa}
             batchFiltro={batchFiltro}
@@ -323,7 +325,7 @@ export const StepReport: React.FC<StepReportProps> = ({
       <div className="print-only">
         <SimpleFunctionalPdfReport
           meta={meta}
-          campaigns={campaigns}
+          campaigns={activeCampaigns}
           capa={capa}
         />
       </div>

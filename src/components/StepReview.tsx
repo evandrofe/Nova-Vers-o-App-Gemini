@@ -9,10 +9,16 @@ import {
   Layers,
   HelpCircle,
   Wand2,
-  MapPin
+  MapPin,
+  Trash2
 } from 'lucide-react';
 import { CampaignRow, ObjectiveType, ReportMeta } from '../types';
-import { OBJ_COLORS, OBJ_LABELS, OBJ_OPTIONS } from '../lib/metaAdsParser';
+import { applyCampaignPatch, OBJ_COLORS, OBJ_LABELS, OBJ_OPTIONS } from '../lib/metaAdsParser';
+import {
+  EMPTY_CAMPAIGN_CLEAR_PATCH,
+  hasFilledText,
+  isCampaignRowEmpty
+} from '../lib/columnsGuide';
 import { EditableNumber, EditableText } from './EditableField';
 
 interface StepReviewProps {
@@ -79,23 +85,63 @@ export const StepReview: React.FC<StepReviewProps> = ({
     setTimeout(() => setBatchAppliedMsg(false), 3000);
   };
 
-  const pendingCount = campaigns.filter((c) => c.objective === 'indefinido').length;
-  const totalCount = campaigns.length;
+  const activeCampaigns = campaigns.filter((c) => !isCampaignRowEmpty(c));
+  const emptyRowsCount = campaigns.length - activeCampaigns.length;
+  const pendingCount = activeCampaigns.filter((c) => c.objective === 'indefinido').length;
+  const totalCount = activeCampaigns.length;
   const classifiedCount = totalCount - pendingCount;
+
+  const handleRowPatch = (row: CampaignRow, patch: Partial<CampaignRow>) => {
+    const next = applyCampaignPatch(row, patch);
+    const hasVisibleText =
+      hasFilledText(next.displayName) ||
+      hasFilledText(next.format) ||
+      hasFilledText(next.validity) ||
+      hasFilledText(next.filtro) ||
+      hasFilledText(next.cidade) ||
+      hasFilledText(next.observacao);
+
+    const isReelsRow = /^Reels/i.test(next.objective);
+    const isAlcanceRow = next.objective === 'Alc' || next.objective === 'ReelsAlc';
+    const isEngEqualToReach = next.reach > 0 && next.eng === next.reach;
+    const suppressEng = isAlcanceRow && (isEngEqualToReach || next.objective === 'Alc');
+
+    let visibleMainMetricVal = 0;
+    if (next.conv > 0 || /Whats/i.test(next.objective)) {
+      visibleMainMetricVal = next.conv || 0;
+    } else if (isReelsRow) {
+      visibleMainMetricVal = next.views || 0;
+    } else if (next.links > 0 || /Link/i.test(next.objective)) {
+      visibleMainMetricVal = next.links || 0;
+    } else if (!suppressEng) {
+      visibleMainMetricVal = next.eng || 0;
+    }
+
+    if (!hasVisibleText && (next.spent || 0) <= 0 && (next.reach || 0) <= 0 && visibleMainMetricVal <= 0) {
+      onUpdateCampaign(row.id, { ...patch, ...EMPTY_CAMPAIGN_CLEAR_PATCH });
+      return;
+    }
+
+    onUpdateCampaign(row.id, patch);
+  };
 
   // Filter campaigns
   const filteredCampaigns = campaigns.filter((c) => {
+    const rowEmpty = isCampaignRowEmpty(c);
+    const q = searchTerm.trim().toLowerCase();
     const matchesSearch =
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.format.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesObj = filterObjective === 'all' || c.objective === filterObjective;
+      !q ||
+      (c.displayName || '').toLowerCase().includes(q) ||
+      (!rowEmpty && c.name.toLowerCase().includes(q)) ||
+      (c.format || '').toLowerCase().includes(q) ||
+      (c.observacao || '').toLowerCase().includes(q);
+    const matchesObj = filterObjective === 'all' || (!rowEmpty && c.objective === filterObjective);
     return matchesSearch && matchesObj;
   });
 
-  // Calculate objective counts
+  // Calculate objective counts (only active non-empty rows)
   const counts: Record<string, number> = {};
-  campaigns.forEach((c) => {
+  activeCampaigns.forEach((c) => {
     counts[c.objective] = (counts[c.objective] || 0) + 1;
   });
 
@@ -193,7 +239,12 @@ export const StepReview: React.FC<StepReviewProps> = ({
           </div>
 
           {/* Metric Badges */}
-          <div className="flex items-center gap-2 text-xs text-neutral-400">
+          <div className="flex items-center gap-2 text-xs text-neutral-400 flex-wrap">
+            {emptyRowsCount > 0 && (
+              <span className="bg-red-950/30 text-red-300 px-2.5 py-1 rounded-md border border-red-500/30">
+                {emptyRowsCount} {emptyRowsCount === 1 ? 'linha apagada (oculta no relatório final)' : 'linhas apagadas (ocultas no relatório final)'}
+              </span>
+            )}
             <span className="bg-[#1a1b20] px-2.5 py-1 rounded-md border border-[#2e3037]">
               Classificadas: <strong className="text-white">{classifiedCount}</strong>/{totalCount}
             </span>
@@ -318,6 +369,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                 <th className="py-3 px-3 text-right">Métrica Principal</th>
                 <th className="py-3 px-2 text-center min-w-[130px]">Filtro (Público)</th>
                 <th className="py-3 px-2 text-center min-w-[110px]">Cidade</th>
+                <th className="py-3 px-2 text-center min-w-[140px]">Observação</th>
                 <th className="py-3 px-4 text-center">Ajustar Objetivo</th>
               </tr>
             </thead>
@@ -325,29 +377,42 @@ export const StepReview: React.FC<StepReviewProps> = ({
               {filteredCampaigns.map((c) => {
                 const style = OBJ_COLORS[c.objective] || OBJ_COLORS.indefinido;
                 const isReels = /^Reels/i.test(c.objective);
+                const rowIsEmpty = isCampaignRowEmpty(c);
 
                 return (
-                  <tr key={c.id} className="hover:bg-[#1a1b20]/60 transition-colors">
+                  <tr
+                    key={c.id}
+                    className={`transition-colors ${
+                      rowIsEmpty ? 'opacity-55 bg-red-950/10 hover:bg-red-950/15' : 'hover:bg-[#1a1b20]/60'
+                    }`}
+                  >
                     {/* Name */}
                     <td className="py-3 px-4">
                       <div className="max-w-md">
                         <input
                           type="text"
                           value={c.displayName}
-                          onChange={(e) => onUpdateDisplayName(c.id, e.target.value)}
+                          placeholder={rowIsEmpty ? 'Linha apagada...' : 'Nome da ação'}
+                          onChange={(e) => handleRowPatch(c, { displayName: e.target.value })}
                           className="font-semibold text-white bg-transparent hover:bg-[#202228] px-1.5 py-0.5 rounded border border-transparent hover:border-[#383b44] focus:border-amber-400 focus:bg-[#202228] focus:outline-none transition-all w-full truncate"
                           title="Clique para editar o nome exibido da ação no relatório"
                         />
-                        <span className="text-[11px] text-neutral-500 block truncate mt-0.5" title={c.name}>
-                          {c.name}
-                        </span>
+                        {rowIsEmpty ? (
+                          <span className="text-[10px] text-red-300/90 block mt-0.5 px-1.5">
+                            Linha sem dados — será ocultada do relatório final do cliente
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-neutral-500 block truncate mt-0.5" title={c.name}>
+                            {c.name}
+                          </span>
+                        )}
 
-                        {c.aiNotes && (
+                        {!rowIsEmpty && c.aiNotes && (
                           <div className="mt-1 flex items-center gap-1.5 text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 w-full">
                             <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
                             <EditableText
                               value={c.aiNotes}
-                              onChange={(v) => onUpdateCampaign(c.id, { aiNotes: v })}
+                              onChange={(v) => handleRowPatch(c, { aiNotes: v })}
                               placeholder="Observação..."
                               className="text-[10px] text-amber-300 w-full px-1 py-0"
                             />
@@ -361,7 +426,8 @@ export const StepReview: React.FC<StepReviewProps> = ({
                       <input
                         type="text"
                         value={c.format}
-                        onChange={(e) => onUpdateFormat(c.id, e.target.value)}
+                        placeholder="—"
+                        onChange={(e) => handleRowPatch(c, { format: e.target.value })}
                         className="bg-[#1f2026] text-neutral-200 border border-[#2e3037] rounded px-2 py-1 text-xs w-24 focus:outline-none focus:border-amber-400"
                       />
                     </td>
@@ -372,7 +438,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         type="text"
                         placeholder="Ex: 01 a 31/10"
                         value={c.validity || ''}
-                        onChange={(e) => onUpdateCampaign(c.id, { validity: e.target.value })}
+                        onChange={(e) => handleRowPatch(c, { validity: e.target.value })}
                         className="bg-[#111215] border border-[#2e3037] focus:border-amber-400 rounded px-2 py-1 text-xs text-neutral-200 w-28 focus:outline-none"
                         title="Editar validade / período"
                       />
@@ -380,20 +446,26 @@ export const StepReview: React.FC<StepReviewProps> = ({
 
                     {/* Objective Badge */}
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${style.bg} ${style.text} ${style.border}`}
-                      >
-                        {OBJ_LABELS[c.objective] || c.objective}
-                      </span>
+                      {rowIsEmpty ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-neutral-900 text-neutral-500 border-neutral-800">
+                          Oculta
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${style.bg} ${style.text} ${style.border}`}
+                        >
+                          {OBJ_LABELS[c.objective] || c.objective}
+                        </span>
+                      )}
                     </td>
 
                     {/* Spent */}
                     <td className="py-3 px-3 whitespace-nowrap text-right font-medium text-white">
                       <EditableNumber
                         value={c.spent}
-                        onChange={(val) => onUpdateCampaign(c.id, { spent: val })}
+                        onChange={(val) => handleRowPatch(c, { spent: val })}
                         format="brl"
-                        dashWhenZero={false}
+                        dashWhenZero={rowIsEmpty}
                         className="text-right font-medium text-white w-24 border-[#2e3037] bg-[#111215]"
                       />
                     </td>
@@ -402,7 +474,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                     <td className="py-3 px-3 whitespace-nowrap text-right text-neutral-300">
                       <EditableNumber
                         value={c.reach}
-                        onChange={(val) => onUpdateCampaign(c.id, { reach: val })}
+                        onChange={(val) => handleRowPatch(c, { reach: val })}
                         format="int"
                         dashWhenZero={true}
                         className="text-right text-neutral-200 w-20 border-[#2e3037] bg-[#111215]"
@@ -412,6 +484,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                     {/* Main Metric */}
                     <td className="py-3 px-3 whitespace-nowrap text-right text-neutral-300">
                       {(() => {
+                        if (rowIsEmpty) return <span className="text-neutral-500">—</span>;
                         const isAlcance = c.objective === 'Alc' || c.objective === 'ReelsAlc';
                         const isEngEqualToReach = c.reach > 0 && c.eng === c.reach;
                         const shouldSuppressEng = isAlcance && (isEngEqualToReach || c.objective === 'Alc');
@@ -421,7 +494,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                             <div className="inline-flex items-center gap-1 justify-end">
                               <EditableNumber
                                 value={c.conv}
-                                onChange={(val) => onUpdateCampaign(c.id, { conv: val })}
+                                onChange={(val) => handleRowPatch(c, { conv: val })}
                                 format="int"
                                 dashWhenZero={false}
                                 className="text-right text-emerald-400 font-semibold w-16 border-[#2e3037] bg-[#111215]"
@@ -435,7 +508,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                             <div className="inline-flex items-center gap-1 justify-end">
                               <EditableNumber
                                 value={c.views}
-                                onChange={(val) => onUpdateCampaign(c.id, { views: val })}
+                                onChange={(val) => handleRowPatch(c, { views: val })}
                                 format="int"
                                 dashWhenZero={false}
                                 className="text-right text-amber-400 font-semibold w-20 border-[#2e3037] bg-[#111215]"
@@ -449,7 +522,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                             <div className="inline-flex items-center gap-1 justify-end">
                               <EditableNumber
                                 value={c.links}
-                                onChange={(val) => onUpdateCampaign(c.id, { links: val })}
+                                onChange={(val) => handleRowPatch(c, { links: val })}
                                 format="int"
                                 dashWhenZero={false}
                                 className="text-right text-cyan-300 font-semibold w-16 border-[#2e3037] bg-[#111215]"
@@ -463,7 +536,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                             <div className="inline-flex items-center gap-1 justify-end">
                               <EditableNumber
                                 value={c.eng}
-                                onChange={(val) => onUpdateCampaign(c.id, { eng: val })}
+                                onChange={(val) => handleRowPatch(c, { eng: val })}
                                 format="int"
                                 dashWhenZero={false}
                                 className="text-right text-purple-300 font-semibold w-16 border-[#2e3037] bg-[#111215]"
@@ -489,7 +562,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         type="text"
                         placeholder="Ex: Raio 5km"
                         value={c.filtro || ''}
-                        onChange={(e) => onUpdateFiltro(c.id, e.target.value)}
+                        onChange={(e) => handleRowPatch(c, { filtro: e.target.value })}
                         className="bg-[#111215] border border-[#2e3037] focus:border-amber-400 rounded px-2 py-1 text-xs text-neutral-200 w-32 focus:outline-none truncate"
                         title="Filtro de segmentação (ex: 18 a 65 anos • Raio 5km)"
                       />
@@ -501,25 +574,49 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         type="text"
                         placeholder="Ex: Sua Cidade"
                         value={c.cidade || ''}
-                        onChange={(e) => onUpdateCidade(c.id, e.target.value)}
+                        onChange={(e) => handleRowPatch(c, { cidade: e.target.value })}
                         className="bg-[#111215] border border-[#2e3037] focus:border-amber-400 rounded px-2 py-1 text-xs text-neutral-200 w-28 focus:outline-none truncate"
                         title="Cidade da campanha"
                       />
                     </td>
 
-                    {/* Selector */}
+                    {/* Observação manual */}
+                    <td className="py-3 px-2 whitespace-nowrap">
+                      <input
+                        type="text"
+                        placeholder="Observação..."
+                        value={c.observacao || ''}
+                        onChange={(e) => handleRowPatch(c, { observacao: e.target.value })}
+                        className="bg-[#111215] border border-[#2e3037] focus:border-amber-400 rounded px-2 py-1 text-xs text-neutral-200 w-36 focus:outline-none truncate"
+                        title="Observação opcional (só aparece no relatório final se preenchida)"
+                      />
+                    </td>
+
+                    {/* Selector + Quick Clear Row */}
                     <td className="py-3 px-4 whitespace-nowrap text-center">
-                      <select
-                        value={c.objective}
-                        onChange={(e) => onUpdateObjective(c.id, e.target.value as ObjectiveType)}
-                        className="bg-[#1a1b20] text-neutral-200 border border-[#33353e] hover:border-amber-500/50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-400 transition-all cursor-pointer"
-                      >
-                        {OBJ_OPTIONS.map((opt) => (
-                          <option key={opt} value={opt} className="bg-[#141518] text-white">
-                            {OBJ_LABELS[opt]}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="inline-flex items-center gap-1.5">
+                        <select
+                          value={c.objective}
+                          onChange={(e) => onUpdateObjective(c.id, e.target.value as ObjectiveType)}
+                          className="bg-[#1a1b20] text-neutral-200 border border-[#33353e] hover:border-amber-500/50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-400 transition-all cursor-pointer"
+                        >
+                          {OBJ_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt} className="bg-[#141518] text-white">
+                              {OBJ_LABELS[opt]}
+                            </option>
+                          ))}
+                        </select>
+                        {!rowIsEmpty && (
+                          <button
+                            type="button"
+                            onClick={() => onUpdateCampaign(c.id, EMPTY_CAMPAIGN_CLEAR_PATCH)}
+                            className="p-1.5 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer"
+                            title="Apagar todos os dados desta linha (remove do relatório final e atualiza os totais)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

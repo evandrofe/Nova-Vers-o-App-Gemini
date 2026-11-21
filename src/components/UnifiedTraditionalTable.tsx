@@ -10,15 +10,20 @@ import {
   FileSpreadsheet,
   Maximize2,
   Minimize2,
-  ArrowUp
+  ArrowUp,
+  Trash2
 } from 'lucide-react';
 import { CampaignRow, CapaData, ReportMeta } from '../types';
 import { extractDateFromName } from '../lib/metaAdsParser';
 import { exportCostSheetWebReport } from '../lib/interactiveHtmlExport';
 import {
   COLUMNS_17_GUIDE,
+  EMPTY_CAMPAIGN_CLEAR_PATCH,
+  filterActiveCampaigns,
   getActiveCostColumns,
-  getCampaignRowDisplayMetrics
+  getCampaignRowDisplayMetrics,
+  hasFilledText,
+  isCampaignRowEmpty
 } from '../lib/columnsGuide';
 import { EditableNumber, EditableText } from './EditableField';
 import { BRAND_LOGO_DATA_URI } from '../lib/brandLogo';
@@ -112,24 +117,26 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
   const setBatchFiltro = onChangeBatchFiltro || setLocalBatchFiltro;
   const setBatchCidade = onChangeBatchCidade || setLocalBatchCidade;
 
+  const activeCampaigns = useMemo(() => filterActiveCampaigns(campaigns), [campaigns]);
+
   // If batch inputs are empty on mount, pre-fill from existing campaign values (e.g. edited row-by-row in Step 2)
   useEffect(() => {
     if (didSyncInitialRef.current) return;
     didSyncInitialRef.current = true;
 
     if (!batchFiltro.trim()) {
-      const existingFiltros = campaigns.map((c) => (c.filtro || '').trim()).filter(Boolean);
+      const existingFiltros = activeCampaigns.map((c) => (c.filtro || '').trim()).filter(Boolean);
       if (existingFiltros.length > 0) {
         setBatchFiltro(existingFiltros[0]);
       }
     }
     if (!batchCidade.trim()) {
-      const existingCidades = campaigns.map((c) => (c.cidade || '').trim()).filter(Boolean);
+      const existingCidades = activeCampaigns.map((c) => (c.cidade || '').trim()).filter(Boolean);
       if (existingCidades.length > 0) {
         setBatchCidade(existingCidades[0]);
       }
     }
-  }, [campaigns, batchFiltro, batchCidade, setBatchFiltro, setBatchCidade]);
+  }, [activeCampaigns, batchFiltro, batchCidade, setBatchFiltro, setBatchCidade]);
 
   useEffect(() => {
     return () => {
@@ -156,7 +163,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
   };
 
   const handleExportHtml = () => {
-    exportCostSheetWebReport(meta, campaigns);
+    exportCostSheetWebReport(meta, activeCampaigns);
   };
 
   const handleFocusColumnGuide = (colNum: number) => {
@@ -189,6 +196,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
       onBatchUpdateFiltroCidade(batchFiltro.trim(), batchCidade.trim());
     } else {
       campaigns.forEach((c) => {
+        if (isCampaignRowEmpty(c)) return;
         if (batchFiltro.trim()) onUpdateFiltro?.(c.id, batchFiltro.trim());
         if (batchCidade.trim()) onUpdateCidade?.(c.id, batchCidade.trim());
       });
@@ -204,14 +212,24 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
   );
   const vis = (colNum: number) => visibleSet.has(colNum);
   const colBadgeNum = (colNum: number) => displayNumMap.get(colNum) ?? colNum;
-
-  const setupCols = useMemo(
-    () => activeColumns.filter((c) => c.category === 'setup' || c.category === 'financeiro'),
+  const lastMetricColNum = useMemo(
+    () => activeColumns.filter((c) => c.num < 18).reduce((max, c) => Math.max(max, c.num), 0),
     [activeColumns]
   );
-  const topoCols = useMemo(() => activeColumns.filter((c) => c.category === 'topo'), [activeColumns]);
-  const meioCols = useMemo(() => activeColumns.filter((c) => c.category === 'meio'), [activeColumns]);
-  const fundoCols = useMemo(() => activeColumns.filter((c) => c.category === 'fundo'), [activeColumns]);
+  const cellR = (colNum: number) => (colNum !== lastMetricColNum ? 'border-r ' : '');
+
+  const glossaryColumns = useMemo(
+    () => activeColumns.filter((c) => c.num !== 18),
+    [activeColumns]
+  );
+
+  const setupCols = useMemo(
+    () => glossaryColumns.filter((c) => c.category === 'setup' || c.category === 'financeiro'),
+    [glossaryColumns]
+  );
+  const topoCols = useMemo(() => glossaryColumns.filter((c) => c.category === 'topo'), [glossaryColumns]);
+  const meioCols = useMemo(() => glossaryColumns.filter((c) => c.category === 'meio'), [glossaryColumns]);
+  const fundoCols = useMemo(() => glossaryColumns.filter((c) => c.category === 'fundo'), [glossaryColumns]);
 
   // Ensure activeGuideTab resets to 'all' if the active category becomes empty in presentation mode
   useEffect(() => {
@@ -221,27 +239,34 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
     else if (activeGuideTab === 'fundo' && fundoCols.length === 0) setActiveGuideTab('all');
   }, [activeGuideTab, setupCols.length, topoCols.length, meioCols.length, fundoCols.length]);
 
-  // Filter campaigns based on search query
+  // Filter campaigns based on search query (hide empty rows in read-only mode)
   const filteredCampaigns = useMemo(() => {
-    if (!searchQuery.trim()) return campaigns;
+    const baseList = isReadOnly ? activeCampaigns : campaigns;
+    if (!searchQuery.trim()) return baseList;
     const q = searchQuery.toLowerCase();
-    return campaigns.filter(
+    return baseList.filter(
       (c) =>
         (c.name && c.name.toLowerCase().includes(q)) ||
         (c.displayName && c.displayName.toLowerCase().includes(q)) ||
         (c.format && c.format.toLowerCase().includes(q)) ||
-        (c.objective && c.objective.toLowerCase().includes(q))
+        (c.objective && c.objective.toLowerCase().includes(q)) ||
+        (c.observacao && c.observacao.toLowerCase().includes(q))
     );
-  }, [campaigns, searchQuery]);
+  }, [campaigns, activeCampaigns, isReadOnly, searchQuery]);
 
-  // Filter guide columns from activeColumns
+  const activeFilteredCount = useMemo(
+    () => filteredCampaigns.filter((c) => !isCampaignRowEmpty(c)).length,
+    [filteredCampaigns]
+  );
+
+  // Filter guide columns from glossaryColumns (excluding Observação)
   const filteredGuide = useMemo(() => {
-    if (activeGuideTab === 'all') return activeColumns;
+    if (activeGuideTab === 'all') return glossaryColumns;
     if (activeGuideTab === 'setup') return setupCols;
     if (activeGuideTab === 'topo') return topoCols;
     if (activeGuideTab === 'meio') return meioCols;
     return fundoCols;
-  }, [activeGuideTab, activeColumns, setupCols, topoCols, meioCols, fundoCols]);
+  }, [activeGuideTab, glossaryColumns, setupCols, topoCols, meioCols, fundoCols]);
 
   let lastDateKey = '';
 
@@ -278,9 +303,9 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
               </h1>
               <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
                 {allVisible
-                  ? 'Matriz Oficial de 17 Colunas e Métricas Detalhadas'
+                  ? `Matriz Oficial de ${activeColumns.length} Colunas e Métricas Detalhadas`
                   : `Matriz Executiva de ${activeColumns.length} Colunas Preenchidas e Métricas Detalhadas`}{' '}
-                • Base de dados oficial da Meta ({campaigns.length} ações)
+                • Base de dados oficial da Meta ({activeCampaigns.length} ações)
               </p>
             </div>
           </div>
@@ -404,7 +429,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30">
                 Planilha de Custos ·{' '}
-                {allVisible ? '17 Colunas Oficiais Meta Ads' : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
+                {allVisible ? `${activeColumns.length} Colunas Oficiais Meta Ads` : `${activeColumns.length} Colunas Preenchidas Meta Ads`}
               </span>
               <span className="text-[11px] text-neutral-400">
                 Clique no título de qualquer coluna abaixo para ir direto à explicação dela
@@ -722,7 +747,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                   </th>
                 )}
                 {vis(17) && (
-                  <th className="border-b border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 hover:bg-emerald-950/60 text-emerald-300 font-extrabold transition-colors">
+                  <th className={`border-b ${vis(18) ? 'border-r ' : ''}border-[#2b2d33] text-right whitespace-nowrap min-w-[95px] p-0 bg-emerald-950/40 hover:bg-emerald-950/60 text-emerald-300 font-extrabold transition-colors`}>
                     <button
                       type="button"
                       onClick={() => handleFocusColumnGuide(17)}
@@ -734,10 +759,17 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     </button>
                   </th>
                 )}
+                {vis(18) && (
+                  <th className="border-b border-[#2b2d33] text-left whitespace-nowrap min-w-[150px] p-0">
+                    <div className="w-full py-3 px-2.5 flex items-center gap-1 text-left">
+                      <span>Observação</span>
+                    </div>
+                  </th>
+                )}
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-[#23252b]">
+            <tbody>
               {filteredCampaigns.length === 0 ? (
                 <tr>
                   <td colSpan={activeColumns.length} className="py-12 text-center text-neutral-400 text-sm italic">
@@ -765,25 +797,50 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                   } = getCampaignRowDisplayMetrics(r);
 
                   const canEditCell = !isReadOnly && Boolean(onUpdateCampaign);
+                  const rowIsEmpty = isCampaignRowEmpty(r);
+                  const rowHasObs = hasFilledText(r.observacao);
 
                   return (
                     <React.Fragment key={r.id}>
                       {showSeparator && (
-                        <tr className="bg-[#101114] border-y border-[#2b2d33] h-2">
-                          <td colSpan={activeColumns.length} className="h-2 p-0" />
+                        <tr className="h-2">
+                          <td
+                            colSpan={vis(18) ? Math.max(1, activeColumns.length - 1) : activeColumns.length}
+                            className="h-2 p-0 bg-[#101114] border-y border-[#2b2d33]"
+                          />
+                          {vis(18) && <td className="h-2 p-0 bg-[#141518] border-0" />}
                         </tr>
                       )}
-                      <tr className="hover:bg-[#1a1c24] transition-colors group">
+                      <tr className={rowIsEmpty ? 'opacity-55 bg-red-950/10 hover:bg-red-950/20 transition-colors group' : 'hover:bg-[#1a1c24] transition-colors group'}>
                         {vis(1) && (
-                          <td className="py-2.5 px-3 border-r border-[#23252b] text-left font-medium text-white group-hover:text-amber-200 transition-colors">
-                            <EditableText
-                              value={r.displayName || r.name}
-                              onChange={(v) => onUpdateCampaign?.(r.id, { displayName: v })}
-                              isReadOnly={!canEditCell}
-                              placeholder="Nome da ação"
-                              className="font-medium text-white w-full text-[11px]"
-                            />
-                            {r.aiNotes && (
+                          <td className={`py-2.5 px-3 border-b ${cellR(1)}border-[#23252b] text-left font-medium text-white group-hover:text-amber-200 transition-colors`}>
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex-1 min-w-0">
+                                <EditableText
+                                  value={r.displayName ?? r.name}
+                                  onChange={(v) => onUpdateCampaign?.(r.id, { displayName: v })}
+                                  isReadOnly={!canEditCell}
+                                  placeholder="Nome da ação"
+                                  className="font-medium text-white w-full text-[11px]"
+                                />
+                              </div>
+                              {canEditCell && !rowIsEmpty && (
+                                <button
+                                  type="button"
+                                  onClick={() => onUpdateCampaign?.(r.id, EMPTY_CAMPAIGN_CLEAR_PATCH)}
+                                  className="p-1 rounded text-neutral-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all shrink-0 cursor-pointer"
+                                  title="Apagar todos os dados desta linha para ocultá-la do relatório final"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {rowIsEmpty && !isReadOnly && (
+                              <span className="block text-[9px] text-amber-400/90 mt-0.5 font-normal">
+                                Linha sem dados — oculta no relatório final
+                              </span>
+                            )}
+                            {r.aiNotes && !rowIsEmpty && (
                               <div className="mt-0.5">
                                 <EditableText
                                   value={r.aiNotes}
@@ -797,7 +854,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(2) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(2)}border-[#23252b] text-center whitespace-nowrap text-neutral-300`}>
                             <EditableText
                               value={r.format || ''}
                               onChange={(v) => onUpdateCampaign?.(r.id, { format: v })}
@@ -808,7 +865,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(3) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap text-neutral-400">
+                          <td className={`py-2.5 px-2 border-b ${cellR(3)}border-[#23252b] text-center whitespace-nowrap text-neutral-400`}>
                             <EditableText
                               value={r.validity || ''}
                               onChange={(v) => onUpdateCampaign?.(r.id, { validity: v })}
@@ -819,43 +876,43 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(4) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(4)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300`}>
                             <EditableNumber
                               value={r.budget}
                               onChange={(v) => onUpdateCampaign?.(r.id, { budget: v })}
                               format="brl"
                               isReadOnly={!canEditCell}
-                              dashWhenZero={false}
+                              dashWhenZero={rowIsEmpty}
                               className="text-right text-neutral-300 w-24 text-[11px]"
                             />
                           </td>
                         )}
                         {vis(5) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(5)}border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-amber-400 bg-amber-950/10`}>
                             <EditableNumber
                               value={r.spent}
                               onChange={(v) => onUpdateCampaign?.(r.id, { spent: v })}
                               format="brl"
                               isReadOnly={!canEditCell}
-                              dashWhenZero={false}
+                              dashWhenZero={rowIsEmpty}
                               className="text-right font-bold text-amber-400 w-24 text-[11px]"
                             />
                           </td>
                         )}
                         {vis(6) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(6)}border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 font-semibold bg-blue-950/10`}>
                             <EditableNumber
                               value={r.reach}
                               onChange={(v) => onUpdateCampaign?.(r.id, { reach: v })}
                               format="int"
                               isReadOnly={!canEditCell}
-                              dashWhenZero={false}
+                              dashWhenZero={rowIsEmpty}
                               className="text-right font-semibold text-blue-300 w-20 text-[11px]"
                             />
                           </td>
                         )}
                         {vis(7) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(7)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300`}>
                             <EditableNumber
                               value={engValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { eng: v })}
@@ -867,7 +924,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(8) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(8)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300`}>
                             <EditableNumber
                               value={linksValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { links: v })}
@@ -879,7 +936,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(9) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(9)}border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 font-semibold bg-purple-950/10`}>
                             <EditableNumber
                               value={viewsValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { views: v })}
@@ -891,7 +948,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(10) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(10)}border-[#23252b] text-right whitespace-nowrap font-mono text-blue-300 bg-blue-950/10`}>
                             <EditableNumber
                               value={cpmValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { cpm: v })}
@@ -903,7 +960,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(11) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(11)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300`}>
                             <EditableNumber
                               value={cpcValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { cpc: v })}
@@ -915,7 +972,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(12) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(12)}border-[#23252b] text-right whitespace-nowrap font-mono text-purple-300 bg-purple-950/10`}>
                             <EditableNumber
                               value={cThruValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { cThru: v })}
@@ -927,7 +984,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(13) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300">
+                          <td className={`py-2.5 px-2 border-b ${cellR(13)}border-[#23252b] text-right whitespace-nowrap font-mono text-neutral-300`}>
                             <EditableNumber
                               value={cIntValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { cInt: v })}
@@ -939,7 +996,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(14) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10">
+                          <td className={`py-2.5 px-2 border-b ${cellR(14)}border-[#23252b] text-right whitespace-nowrap font-mono text-emerald-300 bg-emerald-950/10`}>
                             <EditableNumber
                               value={cConvValue}
                               onChange={(v) => onUpdateCampaign?.(r.id, { cConv: v })}
@@ -951,7 +1008,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(15) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
+                          <td className={`py-2.5 px-2 border-b ${cellR(15)}border-[#23252b] text-center whitespace-nowrap`}>
                             {isReadOnly ? (
                               <span className="text-[10px] text-neutral-200 block min-w-[85px] truncate" title={r.filtro || undefined}>
                                 {r.filtro || '—'}
@@ -969,7 +1026,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(16) && (
-                          <td className="py-2.5 px-2 border-r border-[#23252b] text-center whitespace-nowrap">
+                          <td className={`py-2.5 px-2 border-b ${cellR(16)}border-[#23252b] text-center whitespace-nowrap`}>
                             {isReadOnly ? (
                               <span className="text-[10px] text-neutral-200 block min-w-[80px] truncate" title={r.cidade || undefined}>
                                 {r.cidade || '—'}
@@ -987,7 +1044,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                           </td>
                         )}
                         {vis(17) && (
-                          <td className="py-2.5 px-2 border-b border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20">
+                          <td className={`py-2.5 px-2 border-b ${cellR(17)}border-[#23252b] text-right whitespace-nowrap font-mono font-bold text-emerald-400 bg-emerald-950/20`}>
                             {canEditCell ? (
                               <div className="inline-flex items-center justify-end gap-1">
                                 <EditableNumber
@@ -1004,6 +1061,36 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                             )}
                           </td>
                         )}
+                        {vis(18) && (
+                          <td
+                            className={
+                              rowHasObs
+                                ? 'py-2.5 px-2.5 border border-[#2b2d33] bg-[#181a20] text-left'
+                                : 'py-2.5 px-2 border-0 bg-[#141518] text-left'
+                            }
+                          >
+                            {isReadOnly ? (
+                              rowHasObs ? (
+                                <span
+                                  className="text-[10px] text-neutral-200 block min-w-[130px] max-w-[240px] whitespace-normal leading-snug"
+                                  title={r.observacao || undefined}
+                                >
+                                  {r.observacao}
+                                </span>
+                              ) : null
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder=""
+                                aria-label="Observação"
+                                value={r.observacao || ''}
+                                onChange={(e) => onUpdateCampaign?.(r.id, { observacao: e.target.value })}
+                                className="bg-transparent hover:bg-[#181a20]/60 focus:bg-[#181a20] border border-transparent hover:border-[#383b44] focus:border-amber-400 rounded px-1.5 py-0.5 text-[10px] text-neutral-200 text-left w-full min-w-[130px] focus:outline-none transition-all"
+                                title="Clique para adicionar uma observação nesta linha (apenas linhas preenchidas exibem célula)"
+                              />
+                            )}
+                          </td>
+                        )}
                       </tr>
                     </React.Fragment>
                   );
@@ -1012,85 +1099,88 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
             </tbody>
 
             {/* Consolidated Totals Footer */}
-            <tfoot className="sticky bottom-0 z-20 bg-[#16171d] border-t-2 border-amber-500 font-mono text-[10.5px]">
+            <tfoot className="sticky bottom-0 z-20 bg-[#16171d] font-mono text-[10.5px]">
               <tr className="text-white font-bold">
                 {leadingColSpan > 0 && (
-                  <td colSpan={leadingColSpan} className="py-3 px-3 border-r border-[#2b2d33] text-left uppercase font-sans tracking-wide">
+                  <td colSpan={leadingColSpan} className={`py-3 px-3 border-t-2 border-t-amber-500 ${lastMetricColNum > 3 ? 'border-r border-r-[#2b2d33] ' : ''}text-left uppercase font-sans tracking-wide`}>
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                      <span>Total Consolidado ({filteredCampaigns.length} ações)</span>
+                      <span>Total Consolidado ({activeFilteredCount} ações)</span>
                     </div>
                   </td>
                 )}
                 {vis(4) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(4)}border-r-[#2b2d33] text-right font-mono text-neutral-300`}>
                     {fmtBRL(totalBudget)}
                   </td>
                 )}
                 {vis(5) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-amber-300 bg-amber-950/30">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(5)}border-r-[#2b2d33] text-right font-mono font-black text-amber-300 bg-amber-950/30`}>
                     {fmtBRL(totalSpent)}
                   </td>
                 )}
                 {vis(6) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-blue-300 bg-blue-950/30">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(6)}border-r-[#2b2d33] text-right font-mono font-black text-blue-300 bg-blue-950/30`}>
                     {fmtNum(totalReach)}
                   </td>
                 )}
                 {vis(7) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(7)}border-r-[#2b2d33] text-right font-mono text-neutral-300`}>
                     {fmtNum(totalInt)}
                   </td>
                 )}
                 {vis(8) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(8)}border-r-[#2b2d33] text-right font-mono text-neutral-300`}>
                     {fmtNum(totalLinks)}
                   </td>
                 )}
                 {vis(9) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono font-black text-purple-300 bg-purple-950/30">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(9)}border-r-[#2b2d33] text-right font-mono font-black text-purple-300 bg-purple-950/30`}>
                     {fmtNum(totalViews)}
                   </td>
                 )}
                 {vis(10) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-blue-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(10)}border-r-[#2b2d33] text-right font-mono text-blue-300`}>
                     {totalReach > 0 ? fmtBRL((totalSpent / totalReach) * 1000) : '—'}
                   </td>
                 )}
                 {vis(11) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(11)}border-r-[#2b2d33] text-right font-mono text-neutral-300`}>
                     {totalLinks > 0 ? fmtBRL(totalSpent / totalLinks) : '—'}
                   </td>
                 )}
                 {vis(12) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-purple-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(12)}border-r-[#2b2d33] text-right font-mono text-purple-300`}>
                     {totalViews > 0 ? fmtBRL(totalSpent / totalViews) : '—'}
                   </td>
                 )}
                 {vis(13) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-neutral-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(13)}border-r-[#2b2d33] text-right font-mono text-neutral-300`}>
                     {totalInt > 0 ? fmtBRL(totalSpent / totalInt) : '—'}
                   </td>
                 )}
                 {vis(14) && (
-                  <td className="py-3 px-2 border-r border-[#2b2d33] text-right font-mono text-emerald-300">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(14)}border-r-[#2b2d33] text-right font-mono text-emerald-300`}>
                     {totalConv > 0 ? fmtBRL(totalSpent / totalConv) : '—'}
                   </td>
                 )}
                 {vis(15) && (
-                  <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
+                  <td className={`py-3 px-1.5 border-t-2 border-t-amber-500 ${cellR(15)}border-r-[#2b2d33] text-center text-neutral-500 font-sans`}>
                     —
                   </td>
                 )}
                 {vis(16) && (
-                  <td className="py-3 px-1.5 border-r border-[#2b2d33] text-center text-neutral-500 font-sans">
+                  <td className={`py-3 px-1.5 border-t-2 border-t-amber-500 ${cellR(16)}border-r-[#2b2d33] text-center text-neutral-500 font-sans`}>
                     —
                   </td>
                 )}
                 {vis(17) && (
-                  <td className="py-3 px-2 text-right font-mono font-black text-emerald-400 bg-emerald-950/40">
+                  <td className={`py-3 px-2 border-t-2 border-t-amber-500 ${cellR(17)}border-r-[#2b2d33] text-right font-mono font-black text-emerald-400 bg-emerald-950/40`}>
                     {totalConv > 0 ? `${totalConv} conv.` : '—'}
                   </td>
+                )}
+                {vis(18) && (
+                  <td className="py-3 px-2 border-0 bg-[#141518]" />
                 )}
               </tr>
             </tfoot>
@@ -1099,7 +1189,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
       </div>
 
       {/* ====================================================================== */}
-      {/* 2. DICIONÁRIO COMPLETO DAS 17 COLUNAS DA PLANILHA */}
+      {/* 2. DICIONÁRIO COMPLETO DAS COLUNAS DA PLANILHA */}
       {/* ====================================================================== */}
       <div id="guia-17-colunas" className="bg-[#141518] rounded-2xl border border-[#2b2d33] p-6 shadow-xl space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2b2d33] pb-4">
@@ -1111,7 +1201,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
               </span>
             </div>
             <h3 className="text-xl font-bold text-white tracking-tight">
-              O que cada uma das {allVisible ? '17' : activeColumns.length} colunas significa e por que é importante?
+              O que cada uma das {glossaryColumns.length} colunas significa e por que é importante?
             </h3>
             <p className="text-xs text-neutral-400 leading-relaxed max-w-3xl">
               Consulte abaixo a descrição didática de cada coluna da planilha, por que ela é indispensável para o cliente
@@ -1129,7 +1219,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
               }`}
             >
-              Todas ({activeColumns.length})
+              Todas ({glossaryColumns.length})
             </button>
             {setupCols.length > 0 && (
               <button
@@ -1140,7 +1230,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
-                {allVisible ? 'Setup & Verba (1 a 5)' : `Setup & Verba (${setupCols.length})`}
+                Setup & Verba ({setupCols.length})
               </button>
             )}
             {topoCols.length > 0 && (
@@ -1152,7 +1242,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
-                {allVisible ? 'Alcance / CPM (6 e 10)' : `Alcance / CPM (${topoCols.length})`}
+                Alcance / CPM ({topoCols.length})
               </button>
             )}
             {meioCols.length > 0 && (
@@ -1164,7 +1254,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
-                {allVisible ? 'Engajamento / Vídeos (7 a 13)' : `Engajamento / Vídeos (${meioCols.length})`}
+                Engajamento / Vídeos ({meioCols.length})
               </button>
             )}
             {fundoCols.length > 0 && (
@@ -1176,7 +1266,7 @@ export const UnifiedTraditionalTable: React.FC<UnifiedTraditionalTableProps> = (
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
-                {allVisible ? 'WhatsApp & Vendas (14 e 17)' : `WhatsApp & Vendas (${fundoCols.length})`}
+                WhatsApp & Vendas ({fundoCols.length})
               </button>
             )}
           </div>
